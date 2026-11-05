@@ -47,7 +47,8 @@ export async function startMock(): Promise<Mock> {
     base("101", { tags: [{ name: "client:AdinNYC" }] }), // on track, client-tagged
     base("102", { status: { name: "Blocked - waiting on client", is_closed_type: false }, ...owner("Vahid", "vahid@growthmaksolutions.com", "z2") }),
     base("103", { end_date: isoDate(-3), completion_percentage: 60 }), // overdue
-    base("104", { status: { name: "QA Review", is_closed_type: false }, end_date: isoDate(1) }), // review, due tomorrow
+    base("104", { name: "Google &amp; Meta Ads", status: { name: "QA Review", is_closed_type: false }, end_date: isoDate(1) }), // review, due tomorrow
+    base("107", { owners_and_work: { owners: [{ zpuid: "z0", name: "Unassigned User", email: "Unassigned User" }] } }), // placeholder owner
     base("105", { status: { name: "Completed", is_closed_type: true }, end_date: isoDate(-2), completed_time: new Date(Date.now() - 3 * DAY).toISOString() }),
     base("106", { status: { name: "Cancelled", is_closed_type: true } }), // must be excluded
   ];
@@ -67,7 +68,7 @@ export async function startMock(): Promise<Mock> {
       if (u.pathname === "/api/v3/portal/999/projects")
         return json({
           projects: [
-            { id: 11, name: "EUR - Eurofins", status: { name: "Active" }, owner: { name: "Aakash", email: "aakash@growthmaksolutions.com" }, custom_fields: [{ label_name: "Client Type", value: "Client" }] },
+            { id: 11, name: "EUR - Eurofins", status: { name: "Active" }, group: { name: "Growthmak Team" }, owner: { name: "Aakash", email: "aakash@growthmaksolutions.com" }, custom_fields: [{ label_name: "Client Type", value: "Client" }] },
             { id: 12, name: "GM - Growthmak", status: { name: "Active" }, custom_fields: [{ label_name: "Client Type", value: "Internal" }] },
             { id: 13, name: "Old Project", status: { name: "Archived" } },
           ],

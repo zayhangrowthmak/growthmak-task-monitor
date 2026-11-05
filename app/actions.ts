@@ -78,6 +78,15 @@ export async function setRole(form: FormData) {
   revalidatePath("/settings");
 }
 
+/** Remove someone from the dashboard (ex-employees, placeholder users) or bring them back. */
+export async function setUserActive(form: FormData) {
+  const admin = await requireAdmin();
+  const id = String(form.get("userId"));
+  if (id === admin.id) return;
+  await prisma.user.update({ where: { id }, data: { active: form.get("active") === "true" } });
+  revalidatePath("/", "layout");
+}
+
 export async function syncNow() {
   await requireAdmin();
   fullSync().catch((e) => console.error("[sync] manual sync failed", e));

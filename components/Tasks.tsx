@@ -176,7 +176,7 @@ export function TaskDetail({ m, month, canComment, closeHref }: { m: MonthTask; 
         <div className="label mb-2">Comments ({t.comments.length})</div>
         <div className="space-y-2">
           {t.comments.map((c) => (
-            <div key={c.id} className="rounded-lg border border-line bg-white p-2.5 text-sm">
+            <div key={c.id} className="rounded-lg border border-line bg-field p-2.5 text-sm">
               <div className="flex justify-between text-[11px] text-ink-3">
                 <span><b className="text-ink-2">{c.author.name}</b> · {reasonLabel(c.reason)}</span>
                 <span>{fmtDateTime(c.createdAt)}</span>

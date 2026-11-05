@@ -59,7 +59,10 @@ export async function refreshConfidence(opts: { silent?: boolean; taskIds?: stri
   // More than 5 at once (e.g. a batch going overdue at midnight) → one digest message
   if (pending.length > 5) {
     const atRisk = pending.filter((p) => p.level === "AT_RISK").length;
-    const text = [`*${pending.length} tasks changed confidence* (${atRisk} At Risk, ${pending.length - atRisk} Tight)`, ...pending.map((p) => p.short), `Dashboard: ${config.appUrl}/overview`].join("\n");
+    const MAX = 20;
+    const lines = pending.slice(0, MAX).map((p) => (p.short.length > 160 ? p.short.slice(0, 157) + "…" : p.short));
+    if (pending.length > MAX) lines.push(`…and ${pending.length - MAX} more`);
+    const text = [`*${pending.length} tasks changed confidence* (${atRisk} At Risk, ${pending.length - atRisk} Tight)`, ...lines, `Dashboard: ${config.appUrl}/overview`].join("\n");
     const res = await postToCliq(text);
     for (const p of pending) await prisma.alertLog.create({ data: { taskId: p.taskId, level: p.level, message: p.short, ok: res.ok, error: res.error } });
     if (res.ok) alerts += pending.length;

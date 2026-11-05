@@ -112,7 +112,8 @@ export async function fullSync(): Promise<string> {
     // First ever sync sets the baseline silently; alerts only fire on later changes
     const baseline = !(await getState("alerts.baseline"));
     const scored = await refreshConfidence({ silent: baseline });
-    if (baseline) await setState("alerts.baseline", new Date().toISOString());
+    // Only count it as the baseline once tasks actually arrived (an empty first sync doesn't count)
+    if (baseline && taskCount > 0) await setState("alerts.baseline", new Date().toISOString());
 
     const detail = `${projectCount} active projects (of ${rawProjects.length} in Zoho), ${taskCount} tasks, ${scored.alerts} alerts`;
     await prisma.syncLog.update({ where: { id: log.id }, data: { ok: true, finishedAt: new Date(), detail } });

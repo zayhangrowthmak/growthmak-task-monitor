@@ -110,7 +110,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
 
       <div className="mt-8 mb-3 flex items-end justify-between">
         <h2 className="text-base font-semibold">Tasks <span className="text-ink-3 font-normal text-sm">· a read-only copy of Zoho Projects</span></h2>
-        <div className="flex rounded-lg border border-line bg-white p-0.5 text-sm">
+        <div className="flex rounded-lg border border-line bg-field p-0.5 text-sm">
           <Link href={`${basePath}?month=${month}&view=kanban`} className={`rounded-md px-3 py-1 ${view === "kanban" ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>Kanban</Link>
           <Link href={`${basePath}?month=${month}&view=list`} className={`rounded-md px-3 py-1 ${view === "list" ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>List</Link>
         </div>

@@ -2,14 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light; }
-body { background: #f6f6f3; color: #0b0b0b; }
+:root {
+  color-scheme: light;
+  --surface: 252 252 251;   /* #fcfcfb cards */
+  --plane: 246 246 243;     /* #f6f6f3 page */
+  --field: 255 255 255;     /* inputs, buttons */
+  --ink: 11 11 11;
+  --ink-2: 82 81 78;
+  --ink-3: 137 135 129;
+  --line: 225 224 217;
+  --brand: 42 120 214;      /* #2a78d6 */
+  --brand-dark: 28 92 171;
+  --brand-soft: 232 241 252;
+  --good-text: 0 99 0;
+  --warn-text: 154 106 0;
+  --blocked-text: 180 71 29;
+  /* chart tokens (used as var(--c-…) in SVG) */
+  --c-grid: #e1e0d9; --c-axis: #c3c2b7; --c-muted: #898781; --c-label: #52514e; --c-surface: #fcfcfb;
+  --c-series-1: #2a78d6; --c-series-2: #eb6834;
+}
+.dark {
+  color-scheme: dark;
+  --surface: 26 26 25;      /* #1a1a19 */
+  --plane: 13 13 13;        /* #0d0d0d */
+  --field: 34 34 32;
+  --ink: 240 239 236;
+  --ink-2: 195 194 183;
+  --ink-3: 137 135 129;
+  --line: 44 44 42;
+  --brand: 57 135 229;      /* #3987e5 */
+  --brand-dark: 134 182 239;
+  --brand-soft: 24 47 79;
+  --good-text: 12 163 12;
+  --warn-text: 250 178 25;
+  --blocked-text: 236 131 90;
+  --c-grid: #2c2c2a; --c-axis: #383835; --c-muted: #898781; --c-label: #c3c2b7; --c-surface: #1a1a19;
+  --c-series-1: #3987e5; --c-series-2: #d95926;
+}
+body { background: rgb(var(--plane)); color: rgb(var(--ink)); }
 .card { @apply bg-surface rounded-xl border border-line; }
-.btn { @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium border border-line bg-white hover:bg-plane transition; }
+.btn { @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium border border-line bg-field hover:bg-plane transition; }
 .btn-primary { @apply bg-brand text-white border-brand hover:bg-brand-dark; }
 .label { @apply text-[11px] font-semibold uppercase tracking-wide text-ink-2; }
 .num { font-variant-numeric: tabular-nums; }
 .tbl th { @apply text-left text-xs font-semibold text-ink-2 py-2 px-3 border-b border-line whitespace-nowrap; }
 .tbl td { @apply py-2 px-3 border-b border-line text-sm; }
 .tbl tr:last-child td { @apply border-b-0; }
-input, select, textarea { @apply rounded-lg border border-line bg-white px-2.5 py-1.5 text-sm outline-none focus:border-brand; }
+input, select, textarea { @apply rounded-lg border border-line bg-field text-ink px-2.5 py-1.5 text-sm outline-none focus:border-brand; }

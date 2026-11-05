@@ -182,6 +182,7 @@ export function groupByPerson(items: MonthTask[], live: boolean): PersonRow[] {
   const map = new Map<string, { name: string; email: string; items: MonthTask[] }>();
   for (const m of items) {
     for (const a of m.task.assignees) {
+      if (!a.user.active) continue; // people removed in Settings don't appear in people views
       const e = map.get(a.userId) ?? { name: a.user.name, email: a.user.email, items: [] };
       e.items.push(m);
       map.set(a.userId, e);

@@ -1,9 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
-// Expose the path to server layouts (for nav highlighting).
-export function middleware(req: NextRequest) {
-  const h = new Headers(req.headers);
-  h.set("x-pathname", req.nextUrl.pathname);
-  return NextResponse.next({ request: { headers: h } });
+// Kept as a no-op pass-through (the nav now reads the path in the browser).
+export function middleware() {
+  return NextResponse.next();
 }
-export const config = { matcher: ["/((?!api|_next|favicon.ico).*)"] };
+export const config = { matcher: [] };

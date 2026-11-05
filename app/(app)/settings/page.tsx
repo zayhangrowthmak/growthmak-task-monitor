@@ -5,7 +5,7 @@ import { zohoConnected } from "@/lib/zoho/client";
 import { cliqConfigured } from "@/lib/cliq";
 import { cleanProjectName } from "@/lib/clients";
 import { fmtDateTime } from "@/lib/time";
-import { syncNow, testCliq, setProjectClient, setRole } from "@/app/actions";
+import { syncNow, testCliq, setProjectClient, setRole, setUserActive } from "@/app/actions";
 import { ClientTypeBadge } from "@/components/ui";
 
 export default async function Settings({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
@@ -51,7 +51,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <p className="text-sm text-ink-2">Posts automatically to <b>#{config.cliq.channel || "—"}</b> when a task turns Tight or At Risk.</p>
           {cliqConfigured() && <form action={testCliq}><button className="btn">Send test message</button></form>}
           <ul className="text-xs text-ink-2 space-y-1 pt-1">
-            {alerts.map((a) => <li key={a.id} className="truncate">{a.ok ? "✓" : "✕"} {fmtDateTime(a.sentAt)} · {a.task.name}</li>)}
+            {alerts.map((a) => <li key={a.id} className="truncate" title={a.error ?? undefined}>{a.ok ? "✓" : "✕"} {fmtDateTime(a.sentAt)} · {a.task.name}{!a.ok && a.error ? ` — ${a.error}` : ""}</li>)}
           </ul>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                 <tr key={p.id} className={p.active ? "" : "opacity-50"}>
                   <td><div className="font-medium">{p.name}</div><div className="text-xs text-ink-3">{p.active ? p.zohoStatus ?? "Active" : "Not synced (inactive)"}</div></td>
                   <td className="num">{p._count.tasks}</td>
-                  <td className="text-sm">{p.zohoClientName ?? cleanProjectName(p.name)} {p.zohoClientType && <ClientTypeBadge type={p.zohoClientType} />}</td>
+                  <td className="text-sm">{p.zohoClientName ?? cleanProjectName(p.name)} <ClientTypeBadge type={p.clientTypeOverride ?? p.zohoClientType ?? (config.internalNames.includes((p.clientOverride ?? p.zohoClientName ?? cleanProjectName(p.name)).toLowerCase()) ? "INTERNAL" : "CLIENT")} /></td>
                   <td colSpan={3}>
                     <form action={setProjectClient} className="flex items-center gap-2">
                       <input type="hidden" name="projectId" value={p.id} />
@@ -91,9 +91,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <h2 className="text-base font-semibold mb-3">People & access</h2>
           <div className="card overflow-x-auto">
             <table className="tbl w-full">
-              <thead><tr><th>Name</th><th>Email</th><th>Access</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Access</th><th></th></tr></thead>
               <tbody>
-                {users.map((u) => (
+                {users.filter((u) => u.active).map((u) => (
                   <tr key={u.id}>
                     <td className="font-medium">{u.name}</td>
                     <td className="text-xs text-ink-2">{u.email}</td>
@@ -106,11 +106,38 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                         </form>
                       )}
                     </td>
+                    <td>
+                      {u.id !== me.id && (
+                        <form action={setUserActive}>
+                          <input type="hidden" name="userId" value={u.id} />
+                          <input type="hidden" name="active" value="false" />
+                          <button className="btn text-crit" aria-label={`Remove ${u.name} from the dashboard`}>Remove</button>
+                        </form>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {users.some((u) => !u.active) && (
+            <div className="mt-4">
+              <div className="label mb-2">Removed from the dashboard</div>
+              <p className="text-xs text-ink-2 mb-2">Hidden from team tables, dashboards and sign-in. Their past tasks still count in client and overall totals.</p>
+              <div className="card divide-y divide-line">
+                {users.filter((u) => !u.active).map((u) => (
+                  <div key={u.id} className="flex items-center justify-between p-3 text-sm">
+                    <span>{u.name} <span className="text-xs text-ink-3">{u.email}</span></span>
+                    <form action={setUserActive}>
+                      <input type="hidden" name="userId" value={u.id} />
+                      <input type="hidden" name="active" value="true" />
+                      <button className="btn">Restore</button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div>
           <h2 className="text-base font-semibold mb-3">Recent jobs</h2>

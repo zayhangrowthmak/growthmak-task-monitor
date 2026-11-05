@@ -74,7 +74,7 @@ export function Kpi({
   );
 }
 
-export function Bar({ value, color = "#2a78d6" }: { value: number; color?: string }) {
+export function Bar({ value, color = "rgb(var(--brand))" }: { value: number; color?: string }) {
   return (
     <div className="h-1.5 w-full rounded-full bg-line overflow-hidden" role="img" aria-label={`${value}%`}>
       <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: color }} />

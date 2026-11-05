@@ -1,17 +1,30 @@
 import type { Config } from "tailwindcss";
+
+// Every colour is a CSS variable (see app/globals.css), so light and dark mode
+// swap in one place. Status colours stay the same in both modes.
+const v = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
+  darkMode: "class",
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        surface: "#fcfcfb",
-        plane: "#f6f6f3",
-        ink: { DEFAULT: "#0b0b0b", 2: "#52514e", 3: "#898781" },
-        line: "#e1e0d9",
-        brand: { DEFAULT: "#2a78d6", dark: "#1c5cab", soft: "#e8f1fc" },
-        good: "#0ca30c", goodText: "#006300", warn: "#fab219", serious: "#ec835a", crit: "#d03b3b",
+        surface: v("surface"),
+        plane: v("plane"),
+        field: v("field"),
+        ink: { DEFAULT: v("ink"), 2: v("ink-2"), 3: v("ink-3") },
+        line: v("line"),
+        brand: { DEFAULT: v("brand"), dark: v("brand-dark"), soft: v("brand-soft") },
+        good: "#0ca30c",
+        goodText: v("good-text"),
+        warn: "#fab219",
+        warnText: v("warn-text"),
+        serious: "#ec835a",
+        crit: "#d03b3b",
+        blockedText: v("blocked-text"),
       },
-      fontFamily: { sans: ['system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'] },
+      fontFamily: { sans: ["system-ui", "-apple-system", '"Segoe UI"', "sans-serif"] },
     },
   },
   plugins: [],

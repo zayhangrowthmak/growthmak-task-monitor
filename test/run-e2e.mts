@@ -75,7 +75,7 @@ async function main() {
   let detail = "";
   await check("full sync runs and reports counts", async () => {
     detail = await fullSync();
-    assert.match(detail, /2 active projects \(of 3 in Zoho\), 6 tasks, 0 alerts/);
+    assert.match(detail, /2 active projects \(of 3 in Zoho\), 7 tasks, 0 alerts/);
   });
   await check("archived projects are stored but not synced", async () => {
     const p = await prisma.project.findUnique({ where: { id: "13" } });
@@ -83,7 +83,7 @@ async function main() {
     assert.equal(await prisma.task.count({ where: { projectId: "13" } }), 0);
   });
   await check("pagination: tasks from both pages are stored", async () => {
-    assert.equal(await prisma.task.count({ where: { projectId: "11" } }), 6);
+    assert.equal(await prisma.task.count({ where: { projectId: "11" } }), 7);
   });
   await check("cancelled tasks drop out of the numbers", async () => {
     assert.equal((await prisma.task.findUnique({ where: { id: "106" } }))?.deleted, true);
@@ -114,6 +114,17 @@ async function main() {
     assert.equal((await t("104")).bucket, "REVIEW");
     assert.equal((await t("105")).bucket, "COMPLETED");
   });
+  await check("HTML entities in names are decoded", async () => {
+    assert.equal((await t("104")).name, "Google & Meta Ads");
+  });
+  await check("'Unassigned User' is not treated as a person", async () => {
+    assert.equal((await t("107")).assignees.length, 0);
+    assert.equal(await prisma.user.count({ where: { name: { startsWith: "Unassigned" } } }), 0);
+  });
+  await check("project group name is not used as the client", async () => {
+    const p = await prisma.project.findUnique({ where: { id: "11" } });
+    assert.equal(p?.zohoClientName, null);
+  });
   await check("client tag wins over project; project custom field sets the type", async () => {
     const tasks = await loadTasks();
     const byClient = groupByClient(monthView(tasks, "all"), true);
@@ -136,7 +147,7 @@ async function main() {
   });
   await check("second sync is idempotent", async () => {
     await fullSync();
-    assert.equal(await prisma.task.count(), 6);
+    assert.equal(await prisma.task.count(), 7);
     assert.equal(await prisma.taskAssignee.count(), 6);
     assert.equal(mock.cliqPosts.length, 0);
   });
@@ -182,9 +193,17 @@ async function main() {
   await check("current month metrics: counts, missed, completion", async () => {
     const items = monthView(await loadTasks(), currentMonth());
     const m = computeMetrics(items, true);
-    assert.equal(m.total, 5);
+    assert.equal(m.total, 6);
     assert.equal(m.completed, 1);
     assert.equal(m.overdueOpen, 1);
+  });
+  await check("people removed in Settings drop out of people views", async () => {
+    const vahid = await prisma.user.findUnique({ where: { email: "vahid@growthmaksolutions.com" } });
+    await prisma.user.update({ where: { id: vahid!.id }, data: { active: false } });
+    const d = await periodData(currentMonth());
+    assert.ok(!d.people.find((p) => p.name === "Vahid"));
+    assert.ok(d.metrics.total >= 6, "their tasks still count in totals");
+    await prisma.user.update({ where: { id: vahid!.id }, data: { active: true } });
   });
   await check("periodData builds insights for the overview", async () => {
     const d = await periodData(currentMonth());

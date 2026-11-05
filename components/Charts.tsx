@@ -13,8 +13,8 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
   const x = (i: number) => L + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw);
   const y = (v: number) => T + ih - (v / 100) * ih;
   const series = [
-    { key: "completedPct" as const, name: "Completed", color: "#2a78d6" },
-    { key: "onTimePct" as const, name: "On time", color: "#eb6834" },
+    { key: "completedPct" as const, name: "Completed", color: "var(--c-series-1)" },
+    { key: "onTimePct" as const, name: "On time", color: "var(--c-series-2)" },
   ];
   const path = (k: "completedPct" | "onTimePct") =>
     data
@@ -36,24 +36,24 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Completion and on-time percentage by month">
         {[0, 25, 50, 75, 100].map((v) => (
           <g key={v}>
-            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={v === 0 ? "#c3c2b7" : "#e1e0d9"} strokeWidth={1} />
-            <text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize={10} fill="#898781">{v}%</text>
+            <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={v === 0 ? "var(--c-axis)" : "var(--c-grid)"} strokeWidth={1} />
+            <text x={L - 6} y={y(v) + 3} textAnchor="end" fontSize={10} fill="var(--c-muted)">{v}%</text>
           </g>
         ))}
         {data.map((d, i) => (
-          <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize={10} fill="#898781">{d.label}</text>
+          <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize={10} fill="var(--c-muted)">{d.label}</text>
         ))}
-        {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={T + ih} stroke="#c3c2b7" strokeDasharray="3 3" />}
+        {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={T + ih} stroke="var(--c-axis)" strokeDasharray="3 3" />}
         {series.map((s) => (
           <g key={s.key}>
             <path d={path(s.key)} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             {data.map((d, i) =>
               d[s.key] === null ? null : (
-                <circle key={i} cx={x(i)} cy={y(d[s.key] as number)} r={hover === i ? 5 : 4} fill={s.color} stroke="#fcfcfb" strokeWidth={2} />
+                <circle key={i} cx={x(i)} cy={y(d[s.key] as number)} r={hover === i ? 5 : 4} fill={s.color} stroke="var(--c-surface)" strokeWidth={2} />
               )
             )}
             {data[last]?.[s.key] !== null && data[last] && (
-              <text x={x(last) + 9} y={y(data[last][s.key] as number) + 4} fontSize={11} fill="#52514e" fontWeight={600}>
+              <text x={x(last) + 9} y={y(data[last][s.key] as number) + 4} fontSize={11} fill="var(--c-label)" fontWeight={600}>
                 {data[last][s.key]}%
               </text>
             )}
@@ -74,7 +74,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
       </svg>
       {hover !== null && data[hover] && (
         <div
-          className="pointer-events-none absolute top-6 rounded-lg border border-line bg-white px-3 py-2 text-xs shadow-sm"
+          className="pointer-events-none absolute top-6 rounded-lg border border-line bg-field px-3 py-2 text-xs shadow-sm"
           style={{ left: `${Math.min(70, (x(hover) / W) * 100)}%` }}
         >
           <div className="font-semibold mb-1">{data[hover].label}</div>
@@ -144,7 +144,7 @@ export function ReasonBars({ rows }: { rows: { label: string; count: number }[] 
             <span className="num text-ink-2">{r.count} · {Math.round((r.count / total) * 100)}%</span>
           </div>
           <div className="h-2.5 rounded bg-line/60">
-            <div className="h-full rounded" style={{ width: `${(r.count / max) * 100}%`, background: "#2a78d6" }} />
+            <div className="h-full rounded" style={{ width: `${(r.count / max) * 100}%`, background: "var(--c-series-1)" }} />
           </div>
         </div>
       ))}

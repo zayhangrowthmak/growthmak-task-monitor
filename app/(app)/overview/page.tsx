@@ -9,7 +9,7 @@ import { Kpi, Bar, SectionTitle, ClientTypeBadge, pctText, Empty, StatusTag } fr
 import { TrendChart, StatusMix, ReasonBars } from "@/components/Charts";
 import { ConfidencePill } from "@/components/ui";
 
-const toneStyle = { good: "text-goodText", crit: "text-crit", warn: "text-[#9a6a00]", info: "text-ink-2" };
+const toneStyle = { good: "text-goodText", crit: "text-crit", warn: "text-warnText", info: "text-ink-2" };
 const toneIcon = { good: "▲", crit: "▼", warn: "◆", info: "●" };
 
 export default async function Overview({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
@@ -124,7 +124,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
                     <td className="num">{pctText(pp.metrics.onTimePct)}</td>
                     <td className={`num ${pp.metrics.missed ? "text-crit font-semibold" : ""}`}>{pp.metrics.missed}</td>
                     <td className="num">{pp.metrics.buckets.IN_PROGRESS}</td>
-                    <td className={`num ${pp.metrics.buckets.BLOCKED ? "text-[#b4471d] font-semibold" : ""}`}>{pp.metrics.buckets.BLOCKED}</td>
+                    <td className={`num ${pp.metrics.buckets.BLOCKED ? "text-blockedText font-semibold" : ""}`}>{pp.metrics.buckets.BLOCKED}</td>
                     <td className="num">{pp.metrics.buckets.REVIEW}</td>
                     <td className="num">{d.live ? pp.metrics.atRisk : "—"}</td>
                     <td className="num">{ratingBy.get(pp.userId) ? `${ratingBy.get(pp.userId)}/10` : "—"}</td>

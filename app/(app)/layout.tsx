@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth";
 import { config } from "@/lib/config";
-import { NavLink } from "@/components/ui";
+import { MainNav, ThemeToggle } from "@/components/Header";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const path = (await headers()).get("x-pathname") ?? "";
   const admin = user.role === "ADMIN";
   const nav = admin
     ? [
@@ -24,13 +22,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand text-sm text-white">G</span>
             <span>Growthmak <span className="text-ink-2 font-normal">Task Monitor</span></span>
           </Link>
-          <nav className="flex gap-1">
-            {nav.map((n) => (
-              <NavLink key={n.href} href={n.href} active={path.startsWith(n.href)}>{n.label}</NavLink>
-            ))}
-          </nav>
+          <MainNav items={nav} />
           <div className="ml-auto flex items-center gap-3 text-sm">
             {config.demoMode && <span className="rounded bg-warn/30 px-2 py-0.5 text-xs font-semibold">Demo data</span>}
+            <ThemeToggle />
             <span className="text-ink-2">{user.name}{admin && <span className="ml-1 text-xs text-ink-3">(Admin)</span>}</span>
             <form action="/api/auth/logout" method="post">
               <button className="btn">Sign out</button>

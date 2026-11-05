@@ -43,6 +43,18 @@ export type NormProject = {
 
 const first = (...vals: any[]) => vals.find((v) => v !== undefined && v !== null && v !== "");
 
+/** Zoho sends some text HTML-escaped ("Google &amp; Meta Ads") */
+export function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
 export function parseZohoDate(v: any): Date | undefined {
   if (v === undefined || v === null || v === "" || v === -1 || v === "-1") return undefined;
   if (typeof v === "number" || /^\d{10,13}$/.test(String(v))) {
@@ -78,11 +90,12 @@ function person(p: any): NormPerson | undefined {
     [p.first_name, p.last_name].filter(Boolean).join(" "),
     p.email
   );
-  if (!name || /^unassigned$/i.test(String(name))) return undefined;
+  if (!name || /^unassigned/i.test(String(name))) return undefined;
+  const email = first(p.email, p.email_id, p.mail)?.toString().toLowerCase();
   return {
     zohoUserId: first(p.zpuid, p.id, p.zuid, p.user_id)?.toString(),
-    name: String(name).trim(),
-    email: first(p.email, p.email_id, p.mail)?.toString().toLowerCase(),
+    name: decodeEntities(String(name).trim()),
+    email: email && email.includes("@") ? email : undefined,
   };
 }
 
@@ -147,15 +160,15 @@ export function normalizeProject(p: any): NormProject {
   const clientTag = tagList.find((t) => /^client\s*[:\-]/i.test(t));
   return {
     id: String(first(p.id, p.id_string)),
-    name: String(p.name ?? "Untitled project").trim(),
+    name: decodeEntities(String(p.name ?? "Untitled project").trim()),
     prefix: first(p.prefix, p.key, p.project_key)?.toString(),
     status: statusName || undefined,
     active,
     owner: person(first(p.owner, p.owner_details, { name: p.owner_name, email: p.owner_email, id: p.owner_id })),
     clientName:
       customField(p, config.zoho.clientFieldLabels) ??
-      (clientTag ? clientTag.replace(/^client\s*[:\-]\s*/i, "").trim() : undefined) ??
-      first(p.group?.name, p.project_group?.name, p.group_name),
+      (clientTag ? clientTag.replace(/^client\s*[:\-]\s*/i, "").trim() : undefined),
+    // Note: the Zoho project *group* is not used for the client — all projects can share one group
     clientType,
     url: first(p.link?.web?.url, p.url),
   };
@@ -189,7 +202,7 @@ export function normalizeTask(t: any, projectId: string, portalName: string): No
     id,
     projectId,
     key: first(t.prefix, t.key, t.task_key)?.toString(),
-    name: String(t.name ?? "Untitled task").trim(),
+    name: decodeEntities(String(t.name ?? "Untitled task").trim()),
     description: stripHtml(first(t.description, t.details?.description)),
     statusName,
     statusColor: first(status.color, status.color_code, status.colour),
