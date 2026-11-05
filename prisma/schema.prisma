@@ -1,0 +1,212 @@
+// Growthmak Task Monitor — data model
+// Zoho Projects is the source of truth for tasks. The dashboard only adds:
+// computed confidence, per-task comments, monthly reviews/ratings, snapshots, reports.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN // super admin / manager — eagle-eye view, can review & rate
+  MEMBER // specialist — sees only their own tasks
+}
+
+enum StatusBucket {
+  READY
+  IN_PROGRESS
+  BLOCKED
+  REVIEW
+  COMPLETED
+}
+
+enum Confidence {
+  ON_TRACK
+  TIGHT
+  AT_RISK
+  NO_DUE_DATE
+  DONE
+}
+
+enum ClientType {
+  CLIENT
+  INTERNAL
+}
+
+enum ReasonCategory {
+  CLIENT_DEPENDENCY
+  WAITING_APPROVAL
+  INTERNAL_DELAY
+  RESOURCE_ABSENT
+  SCOPE_CHANGE
+  TOOL_ACCESS
+  OTHER
+}
+
+model User {
+  id            String   @id @default(cuid())
+  zohoUserId    String?  @unique // zpuid in Zoho Projects
+  email         String   @unique
+  name          String
+  role          Role     @default(MEMBER)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assignments   TaskAssignee[]
+  comments      TaskComment[]
+  reviewsGiven  MonthlyReview[] @relation("reviewer")
+  reviews       MonthlyReview[] @relation("subject")
+}
+
+model Project {
+  id            String     @id // Zoho project id
+  name          String
+  prefix        String? // e.g. "EUR" — task keys look like EUR-T193
+  zohoStatus    String?
+  active        Boolean    @default(true)
+  ownerName     String?
+  ownerEmail    String?
+  // Client name/type as read from Zoho (custom field / tag / group). Overrides below win.
+  zohoClientName String?
+  zohoClientType ClientType?
+  // Manual fix-ups from the Settings page (for the occasional mishap)
+  clientOverride     String?
+  clientTypeOverride ClientType?
+  url           String?
+  raw           Json?
+  updatedAt     DateTime   @updatedAt
+  tasks         Task[]
+}
+
+model Task {
+  id              String       @id // Zoho task id
+  projectId       String
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  key             String? // EUR-T193
+  name            String
+  description     String?
+  zohoStatus      String
+  zohoStatusColor String?
+  bucket          StatusBucket
+  isClosed        Boolean      @default(false)
+  startDate       DateTime?
+  dueDate         DateTime?
+  completedAt     DateTime?
+  completionPct   Int          @default(0)
+  loggedHours     Float        @default(0)
+  createdAtZoho   DateTime?
+  updatedAtZoho   DateTime?
+  createdByName   String?
+  createdByEmail  String?
+  tags            String[]
+  clientFromTag   String? // a "client:Name" tag on the task wins over the project's client
+  url             String?
+  deleted         Boolean      @default(false)
+
+  confidence        Confidence @default(ON_TRACK)
+  confidenceReason  String?
+  confidenceAt      DateTime?
+  // A person can raise a flag early from the dashboard (with a comment)
+  flaggedAtRisk     Boolean    @default(false)
+
+  raw             Json?
+  syncedAt        DateTime     @default(now())
+
+  assignees       TaskAssignee[]
+  comments        TaskComment[]
+  alerts          AlertLog[]
+
+  @@index([projectId])
+  @@index([dueDate])
+  @@index([completedAt])
+}
+
+model TaskAssignee {
+  taskId  String
+  userId  String
+  task    Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+}
+
+model TaskComment {
+  id        String         @id @default(cuid())
+  taskId    String
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User           @relation(fields: [authorId], references: [id])
+  month     String // YYYY-MM the comment was made for
+  reason    ReasonCategory
+  text      String
+  createdAt DateTime       @default(now())
+
+  @@index([taskId])
+  @@index([month])
+}
+
+model MonthlyReview {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation("subject", fields: [userId], references: [id], onDelete: Cascade)
+  reviewerId String
+  reviewer   User     @relation("reviewer", fields: [reviewerId], references: [id])
+  month      String // YYYY-MM
+  rating     Int // 1–10
+  comment    String
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, month])
+}
+
+// Frozen metrics at month end so month-on-month comparisons don't drift.
+model MonthlySnapshot {
+  id        String   @id @default(cuid())
+  month     String
+  scope     String // "overall" | "client:<name>" | "user:<id>"
+  metrics   Json
+  createdAt DateTime @default(now())
+
+  @@unique([month, scope])
+}
+
+model MonthlyReport {
+  month       String   @id // YYYY-MM
+  pdf         Bytes
+  generatedAt DateTime @default(now())
+}
+
+model AlertLog {
+  id        String     @id @default(cuid())
+  taskId    String
+  task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  level     Confidence
+  message   String
+  ok        Boolean
+  error     String?
+  sentAt    DateTime   @default(now())
+
+  @@index([taskId])
+}
+
+model SyncLog {
+  id         String    @id @default(cuid())
+  kind       String // full | webhook | confidence | month-end
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  detail     String?
+}
+
+// Key/value store for the Zoho access token cache etc.
+model AppState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
