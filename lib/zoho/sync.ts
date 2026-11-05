@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma, getState, setState } from "../db";
 import { config } from "../config";
 import { bucketFor } from "../status";
-import { zgetAll, zget, resolvePortalId } from "./client";
+import { zgetAll, zget, resolvePortalId, listFrom } from "./client";
 import { normalizeProject, normalizeTask, type NormPerson, type NormTask } from "./normalize";
 import { refreshConfidence } from "../jobs/confidence";
 import { acquireLock, releaseLock } from "../lock";
@@ -114,7 +114,7 @@ export async function fullSync(): Promise<string> {
     const scored = await refreshConfidence({ silent: baseline });
     if (baseline) await setState("alerts.baseline", new Date().toISOString());
 
-    const detail = `${projectCount} active projects, ${taskCount} tasks, ${scored.alerts} alerts`;
+    const detail = `${projectCount} active projects (of ${rawProjects.length} in Zoho), ${taskCount} tasks, ${scored.alerts} alerts`;
     await prisma.syncLog.update({ where: { id: log.id }, data: { ok: true, finishedAt: new Date(), detail } });
     await setState("sync.last_ok", new Date().toISOString());
     return detail;
@@ -132,14 +132,14 @@ export async function syncOneTask(projectId: string, taskId: string): Promise<vo
   const portal = await resolvePortalId();
   if (!(await prisma.project.findUnique({ where: { id: projectId } }))) {
     const rp = await zget<any>(`/api/v3/portal/${portal}/projects/${projectId}`);
-    const p = normalizeProject(rp?.projects?.[0] ?? rp);
+    const p = normalizeProject(listFrom(rp, "projects")[0] ?? rp);
     await prisma.project.create({
       data: { id: p.id, name: p.name, prefix: p.prefix, active: p.active, zohoClientName: p.clientName, zohoClientType: p.clientType, raw: rp },
     });
   }
   try {
     const json = await zget<any>(`/api/v3/portal/${portal}/projects/${projectId}/tasks/${taskId}`);
-    const rt = json?.tasks?.[0] ?? json?.task ?? json;
+    const rt = listFrom(json, "tasks")[0] ?? json?.task ?? json;
     await saveTask(normalizeTask(rt, projectId, config.zoho.portalName), rt);
   } catch (e: any) {
     if (/404/.test(String(e?.message))) await prisma.task.updateMany({ where: { id: taskId }, data: { deleted: true } });

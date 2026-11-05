@@ -61,12 +61,21 @@ export async function zget<T = any>(path: string, params: Record<string, string 
   return (text ? JSON.parse(text) : {}) as T;
 }
 
+/** Pull the list out of a Zoho response: a bare array, json[key], or the first array-valued property. */
+export function listFrom(json: any, key: string): any[] {
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.[key])) return json[key];
+  if (Array.isArray(json?.data)) return json.data;
+  const firstArray = Object.values(json ?? {}).find((v) => Array.isArray(v) && (v as any[]).every((x) => x && typeof x === "object"));
+  return (firstArray as any[]) ?? [];
+}
+
 /** Fetch every page of a list endpoint. `key` is the array property name in the response. */
 export async function zgetAll(path: string, key: string, params: Record<string, string | number> = {}): Promise<any[]> {
   const out: any[] = [];
   for (let page = 1; page < 200; page++) {
     const json = await zget<any>(path, { ...params, page, per_page: 100 });
-    const items: any[] = json?.[key] ?? [];
+    const items: any[] = listFrom(json, key);
     out.push(...items);
     const info = json?.page_info;
     const more = info ? Boolean(info.has_next_page) : items.length === 100;
@@ -79,17 +88,18 @@ export async function resolvePortalId(): Promise<string> {
   if (config.zoho.portalId) return config.zoho.portalId;
   const saved = await getState("zoho.portal_id");
   if (saved) return saved;
-  const json = await zget<any>("/api/v3/portals");
-  const portals: any[] = Array.isArray(json) ? json : json?.portals ?? [];
+  const portals = await listPortals();
   const want = config.zoho.portalName.toLowerCase();
-  const p =
-    portals.find((x) => String(x.portal_name ?? x.name ?? "").toLowerCase() === want) ??
-    portals.find((x) => String(x.name ?? "").toLowerCase().includes(want)) ??
-    portals[0];
+  const names = (x: any) => [x.portal_name, x.name, x.portal_url, x.unique_name, x.url_name].filter(Boolean).map((v) => String(v).toLowerCase());
+  const p = portals.find((x) => names(x).includes(want)) ?? portals.find((x) => names(x).some((n) => n.includes(want))) ?? portals[0];
   if (!p) throw new Error("No Zoho Projects portal found for this account");
   const id = String(p.id ?? p.id_string ?? p.portal_id);
   await setState("zoho.portal_id", id);
   return id;
+}
+
+export async function listPortals(): Promise<any[]> {
+  return listFrom(await zget<any>("/api/v3/portals"), "portals");
 }
 
 export function clearTokenCache() {

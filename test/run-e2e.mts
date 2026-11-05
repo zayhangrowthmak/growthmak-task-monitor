@@ -75,7 +75,7 @@ async function main() {
   let detail = "";
   await check("full sync runs and reports counts", async () => {
     detail = await fullSync();
-    assert.match(detail, /2 active projects, 6 tasks, 0 alerts/);
+    assert.match(detail, /2 active projects \(of 3 in Zoho\), 6 tasks, 0 alerts/);
   });
   await check("archived projects are stored but not synced", async () => {
     const p = await prisma.project.findUnique({ where: { id: "13" } });
@@ -87,6 +87,14 @@ async function main() {
   });
   await check("cancelled tasks drop out of the numbers", async () => {
     assert.equal((await prisma.task.findUnique({ where: { id: "106" } }))?.deleted, true);
+  });
+
+  await check("list parsing accepts bare arrays and keyed objects", async () => {
+    const { listFrom } = await import("../lib/zoho/client");
+    assert.equal(listFrom([{ id: 1 }], "projects").length, 1);
+    assert.equal(listFrom({ projects: [{ id: 1 }, { id: 2 }] }, "projects").length, 2);
+    assert.equal(listFrom({ data: [{ id: 1 }] }, "projects").length, 1);
+    assert.equal(listFrom({ page_info: {}, items: [{ id: 1 }] }, "projects").length, 1);
   });
 
   console.log("\nField mapping");
