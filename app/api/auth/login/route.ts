@@ -4,9 +4,10 @@ import { signToken, currentUser } from "@/lib/auth";
 
 // Starts Zoho OAuth. purpose=login signs a person in; purpose=connect links the sync account (admins only).
 export async function GET(req: NextRequest) {
-  const purpose = req.nextUrl.searchParams.get("purpose") === "connect" ? "connect" : "login";
+  const asked = req.nextUrl.searchParams.get("purpose");
+  const purpose = asked === "connect" || asked === "mail" ? asked : "login";
   if (!zohoConfigured()) return NextResponse.redirect(`${config.appUrl}/login?error=zoho_not_configured`);
-  if (purpose === "connect") {
+  if (purpose !== "login") {
     const u = await currentUser();
     if (u?.role !== "ADMIN") return NextResponse.redirect(`${config.appUrl}/login`);
   }
@@ -15,9 +16,11 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("client_id", config.zoho.clientId);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("redirect_uri", `${config.appUrl}/api/auth/callback`);
-  url.searchParams.set("scope", purpose === "connect" ? `${config.zoho.syncScopes},${config.zoho.loginScopes}` : config.zoho.loginScopes);
+  const scope =
+    purpose === "connect" ? `${config.zoho.syncScopes},${config.zoho.loginScopes}` : purpose === "mail" ? config.mail.scopes : config.zoho.loginScopes;
+  url.searchParams.set("scope", scope);
   url.searchParams.set("state", state);
-  if (purpose === "connect") {
+  if (purpose !== "login") {
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
   }

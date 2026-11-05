@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
 import { config, zohoConfigured } from "@/lib/config";
 import { prisma } from "@/lib/db";
+import { Logo } from "@/components/Logo";
 
 const ERRORS: Record<string, string> = {
   not_in_portal: "Your Zoho account isn't in the Growthmak Projects portal yet. Ask an admin to add you, then try again.",
@@ -20,10 +21,8 @@ export default async function Login({ searchParams }: { searchParams: Promise<Re
   return (
     <div className="min-h-screen grid place-items-center p-6">
       <div className="card w-full max-w-sm p-7">
-        <div className="flex items-center gap-2 font-semibold text-lg">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-white">G</span>
-          Growthmak Task Monitor
-        </div>
+        <Logo height={40} />
+        <div className="mt-4 text-lg font-semibold">Task Monitor</div>
         <p className="mt-2 text-sm text-ink-2">Sign in with your Zoho account to see your tasks and progress.</p>
         {sp.error && <div className="mt-4 rounded-lg bg-crit/10 p-3 text-sm text-crit">{ERRORS[sp.error] ?? "Sign-in failed."}</div>}
         {zohoConfigured() && <a href="/api/auth/login" className="btn btn-primary mt-5 w-full justify-center py-2">Sign in with Zoho</a>}

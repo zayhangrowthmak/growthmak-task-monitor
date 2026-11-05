@@ -44,6 +44,15 @@ export const config = {
   // Projects/clients treated as internal when Zoho doesn't say otherwise
   internalNames: list(process.env.INTERNAL_CLIENT_NAMES || "Growthmak,GrowthOS,Internal").map((s) => s.toLowerCase()),
 
+  mail: {
+    // Zoho Mail (India DC). Sent over HTTPS because Railway Hobby blocks SMTP.
+    apiBase: (process.env.ZOHO_MAIL_API ?? "https://mail.zoho.in").replace(/\/$/, ""),
+    scopes: process.env.ZOHO_MAIL_SCOPES ?? "ZohoMail.messages.CREATE,ZohoMail.accounts.READ",
+    // Optional: normally set by Settings → Connect Zoho Mail
+    refreshToken: process.env.ZOHO_MAIL_REFRESH_TOKEN ?? "",
+    feedbackTo: (process.env.FEEDBACK_EMAIL ?? "zayhan@growthmak.com").toLowerCase(),
+  },
+
   cliq: {
     // Zoho Cliq channel unique name + webhook token (zapikey) from Cliq → Bots & Tools → Webhook tokens
     apiBase: (process.env.CLIQ_API_BASE ?? "https://cliq.zoho.in").replace(/\/$/, ""),

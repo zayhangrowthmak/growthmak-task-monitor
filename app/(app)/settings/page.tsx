@@ -7,6 +7,8 @@ import { cleanProjectName } from "@/lib/clients";
 import { fmtDateTime } from "@/lib/time";
 import { syncNow, testCliq, setProjectClient, setRole, setUserActive } from "@/app/actions";
 import { ClientTypeBadge } from "@/components/ui";
+import { mailConnected } from "@/lib/mail";
+import { feedbackLabel } from "@/lib/feedback";
 
 export default async function Settings({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const me = await requireAdmin();
@@ -19,6 +21,12 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     getState("sync.last_ok"),
     prisma.alertLog.findMany({ orderBy: { sentAt: "desc" }, take: 8, include: { task: true } }),
   ]);
+  const [mailOk, feedback, mailAcct] = await Promise.all([
+    mailConnected(),
+    prisma.feedback.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
+    getState("zohomail.account"),
+  ]);
+  const mailFrom = mailAcct ? (JSON.parse(mailAcct).fromAddress as string) : null;
   const webhookUrl = `${config.appUrl}/api/webhooks/zoho?secret=${config.zoho.webhookSecret ? "••••••" : "<set ZOHO_WEBHOOK_SECRET>"}`;
   const Ok = ({ ok }: { ok: boolean }) => <span className={`text-xs font-semibold ${ok ? "text-goodText" : "text-crit"}`}>{ok ? "✓ Ready" : "✕ Not set up"}</span>;
 
@@ -29,9 +37,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <h1 className="text-2xl font-semibold tracking-tight">Connections & mapping</h1>
       </div>
       {sp.zoho === "connected" && <div className="card p-3 text-sm text-goodText">Zoho Projects connected. The first sync has started.</div>}
+      {sp.mail === "connected" && <div className="card p-3 text-sm text-goodText">Zoho Mail connected. Feedback will now be emailed to {config.mail.feedbackTo}.</div>}
+      {sp.mail === "no_refresh_token" && <div className="card p-3 text-sm text-crit">Zoho didn&apos;t return a refresh token for Mail. Remove the app's access in Zoho Accounts → Connected Apps, then connect again.</div>}
       {sp.zoho === "no_refresh_token" && <div className="card p-3 text-sm text-crit">Zoho didn&apos;t return a refresh token. Remove the app's access in Zoho Accounts → Connected Apps, then connect again.</div>}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-4">
         <div className="card p-4 space-y-2">
           <div className="flex justify-between"><div className="font-semibold">Zoho Projects</div><Ok ok={connected} /></div>
           <p className="text-sm text-ink-2">Portal <b>{config.zoho.portalName}</b> on {config.zoho.apiBase.replace("https://", "")}. Full sync every {config.jobs.syncIntervalMin} min, plus instant updates from the webhook.</p>
@@ -53,6 +63,34 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <ul className="text-xs text-ink-2 space-y-1 pt-1">
             {alerts.map((a) => <li key={a.id} className="truncate" title={a.error ?? undefined}>{a.ok ? "✓" : "✕"} {fmtDateTime(a.sentAt)} · {a.task.name}{!a.ok && a.error ? ` — ${a.error}` : ""}</li>)}
           </ul>
+        </div>
+        <div className="card p-4 space-y-2">
+          <div className="flex justify-between"><div className="font-semibold">Feedback email</div><Ok ok={mailOk} /></div>
+          <p className="text-sm text-ink-2">Feedback is emailed to <b>{config.mail.feedbackTo}</b> through Zoho Mail{mailFrom ? <> (sent from {mailFrom})</> : null}. Connect while signed in to that mailbox.</p>
+          {zohoConfigured() && <a href="/api/auth/login?purpose=mail" className="btn">{mailOk ? "Reconnect Zoho Mail" : "Connect Zoho Mail"}</a>}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-end justify-between mb-1">
+          <h2 className="text-base font-semibold">Feedback</h2>
+          <span className="text-xs text-ink-3">{feedback.length ? `Latest ${feedback.length}` : ""}</span>
+        </div>
+        <p className="text-sm text-ink-2 mb-3">Everything sent from the Feedback button. Each one is also emailed to {config.mail.feedbackTo}.</p>
+        <div className="card divide-y divide-line">
+          {feedback.map((f) => (
+            <details key={f.id} className="p-3 text-sm">
+              <summary className="flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="rounded bg-plane border border-line px-1.5 py-0.5 text-[11px] font-semibold">{feedbackLabel(f.type)}</span>
+                <span className="font-medium">{f.subject}</span>
+                <span className="text-xs text-ink-2">{f.userName}</span>
+                <span className="ml-auto text-xs text-ink-3">{fmtDateTime(f.createdAt)} · {f.emailed ? <span className="text-goodText">emailed</span> : <span className="text-crit" title={f.emailError ?? ""}>not emailed</span>}</span>
+              </summary>
+              <p className="mt-2 whitespace-pre-wrap text-ink-2">{f.message}</p>
+              <p className="mt-1 text-xs text-ink-3">{f.userEmail}{f.page ? ` · page ${f.page}` : ""}{f.emailError ? ` · email error: ${f.emailError}` : ""}</p>
+            </details>
+          ))}
+          {!feedback.length && <div className="p-3 text-sm text-ink-3">No feedback yet.</div>}
         </div>
       </div>
 

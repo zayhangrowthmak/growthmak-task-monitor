@@ -13,6 +13,7 @@ const isoDate = (offsetDays: number) => {
 export type Mock = {
   url: string;
   cliqPosts: string[];
+  mails: { fromAddress: string; toAddress: string; subject: string; content: string }[];
   requests: string[];
   setTaskStatus: (id: string, status: { name: string; is_closed_type: boolean }) => void;
   close: () => Promise<void>;
@@ -20,6 +21,7 @@ export type Mock = {
 
 export async function startMock(): Promise<Mock> {
   const cliqPosts: string[] = [];
+  const mails: Mock["mails"] = [];
   const requests: string[] = [];
   const statusOverride = new Map<string, { name: string; is_closed_type: boolean }>();
 
@@ -86,6 +88,13 @@ export async function startMock(): Promise<Mock> {
         const t = tasks().find((x) => x.id === one[1]);
         return t ? json({ tasks: [t] }) : json({ error: "not found" }, 404);
       }
+      if (u.pathname === "/api/accounts") return json({ data: [{ accountId: "555", primaryEmailAddress: "zayhan@growthmak.com" }] });
+      if (u.pathname === "/api/accounts/555/messages" && req.method === "POST") {
+        const m = JSON.parse(body || "{}");
+        if (String(m.subject).includes("FAIL")) return json({ status: { code: 500 } }, 500);
+        mails.push(m);
+        return json({ status: { code: 200 } });
+      }
       if (u.pathname.startsWith("/api/v2/channelsbyname/")) {
         if (u.searchParams.get("zapikey") !== "mock-cliq-token") return json({ message: "bad token" }, 401);
         cliqPosts.push(JSON.parse(body || "{}").text ?? "");
@@ -99,6 +108,7 @@ export async function startMock(): Promise<Mock> {
   return {
     url: `http://127.0.0.1:${port}`,
     cliqPosts,
+    mails,
     requests,
     setTaskStatus: (id, status) => statusOverride.set(id, status),
     close: () => new Promise((r) => server.close(() => r())),

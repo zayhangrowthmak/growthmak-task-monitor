@@ -1,4 +1,5 @@
 import React from "react";
+import path from "node:path";
 // @react-pdf/renderer is ESM-only; load it with a native import at runtime so it
 // works the same under Next.js and under plain Node scripts/tests.
 type ReactPdf = typeof import("@react-pdf/renderer");
@@ -76,6 +77,7 @@ function ReportDoc({ month, d, reviews }: { month: string; d: Data; reviews: Rev
   return (
     <R.Document title={`Growthmak delivery report — ${monthLabel(month)}`} author="Growthmak Task Monitor">
       <R.Page size="A4" style={s.page}>
+        <R.Image src={path.join(process.cwd(), "public", "logo.png")} style={{ height: 26, width: 102, marginBottom: 12 }} />
         <R.View style={s.band}>
           <R.Text style={s.h1}>Monthly Delivery Report — {monthLabel(month)}</R.Text>
           <R.Text style={s.sub}>Growthmak team performance · generated {fmtDateTime(new Date())}</R.Text>

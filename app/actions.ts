@@ -8,6 +8,7 @@ import { refreshConfidence } from "@/lib/jobs/confidence";
 import { fullSync } from "@/lib/zoho/sync";
 import { postToCliq } from "@/lib/cliq";
 import { generateReport } from "@/lib/jobs/monthEnd";
+import { submitFeedbackFor } from "@/lib/feedback";
 
 const REASON = z.enum(["CLIENT_DEPENDENCY", "WAITING_APPROVAL", "INTERNAL_DELAY", "RESOURCE_ABSENT", "SCOPE_CHANGE", "TOOL_ACCESS", "OTHER"]);
 
@@ -107,4 +108,21 @@ export async function regenerateReport(form: FormData) {
   if (!isValidMonth(month) || month >= currentMonth()) return;
   await generateReport(month, true);
   revalidatePath("/reports");
+}
+
+/** Feedback form (any signed-in user). Returns a small result for the dialog to show. */
+export async function submitFeedback(_prev: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+  const user = await requireUser();
+  const parsed = z
+    .object({
+      type: z.enum(["FEATURE", "PROBLEM", "DATA_ISSUE", "OTHER"]),
+      subject: z.string().trim().min(3, "Add a short subject").max(150),
+      message: z.string().trim().min(5, "Tell us a bit more").max(5000),
+      page: z.string().max(300).optional(),
+    })
+    .safeParse(Object.fromEntries(form));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Please check the form" };
+  const r = await submitFeedbackFor(user, parsed.data);
+  revalidatePath("/settings");
+  return { ok: true, message: r.emailed ? "Thanks! Your feedback was sent." : "Thanks! Your feedback was saved (email is not set up yet, so an admin will see it in Settings)." };
 }

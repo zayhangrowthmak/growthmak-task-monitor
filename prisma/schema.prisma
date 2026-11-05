@@ -210,3 +210,27 @@ model AppState {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+enum FeedbackType {
+  FEATURE
+  PROBLEM
+  DATA_ISSUE
+  OTHER
+}
+
+// Feedback sent from the in-app form. Emailed to FEEDBACK_EMAIL via Zoho Mail and kept here.
+model Feedback {
+  id         String       @id @default(cuid())
+  userId     String?
+  userName   String
+  userEmail  String
+  type       FeedbackType
+  subject    String
+  message    String
+  page       String?
+  emailed    Boolean      @default(false)
+  emailError String?
+  createdAt  DateTime     @default(now())
+
+  @@index([createdAt])
+}

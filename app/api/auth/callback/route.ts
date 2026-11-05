@@ -3,6 +3,7 @@ import { config } from "@/lib/config";
 import { verifyToken, setSession, currentUser } from "@/lib/auth";
 import { prisma, setState } from "@/lib/db";
 import { clearTokenCache } from "@/lib/zoho/client";
+import { clearMailCache } from "@/lib/mail";
 import { fullSync } from "@/lib/zoho/sync";
 
 const fail = (code: string) => NextResponse.redirect(`${config.appUrl}/login?error=${code}`);
@@ -24,6 +25,16 @@ export async function GET(req: NextRequest) {
   });
   const tok = (await tokenRes.json()) as { access_token?: string; refresh_token?: string; error?: string };
   if (!tok.access_token) return fail("token_exchange");
+
+  if (state.purpose === "mail") {
+    const u = await currentUser();
+    if (u?.role !== "ADMIN") return fail("not_admin");
+    if (!tok.refresh_token) return NextResponse.redirect(`${config.appUrl}/settings?mail=no_refresh_token`);
+    await setState("zohomail.refresh_token", tok.refresh_token);
+    await prisma.appState.deleteMany({ where: { key: "zohomail.account" } });
+    clearMailCache();
+    return NextResponse.redirect(`${config.appUrl}/settings?mail=connected`);
+  }
 
   if (state.purpose === "connect") {
     const u = await currentUser();

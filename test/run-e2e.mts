@@ -55,6 +55,9 @@ async function main() {
     CLIQ_API_BASE: mock.url,
     CLIQ_CHANNEL: "delivery-alerts",
     CLIQ_WEBHOOK_TOKEN: "mock-cliq-token",
+    ZOHO_MAIL_API: mock.url,
+    ZOHO_MAIL_REFRESH_TOKEN: "mock-mail-refresh",
+    FEEDBACK_EMAIL: "zayhan@growthmak.com",
   });
 
   console.log(`Migrating fresh schema ${schema}…`);
@@ -223,6 +226,28 @@ async function main() {
     const pdf = await generateReport(last);
     assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
   });
+  console.log("\nFeedback");
+  const { submitFeedbackFor } = await import("../lib/feedback");
+  await check("feedback is saved and emailed to the admin via Zoho Mail", async () => {
+    const user = (await prisma.user.findFirst({ where: { email: "sandeep@growthmaksolutions.com" } }))!;
+    const r = await submitFeedbackFor(user, { type: "FEATURE", subject: "Show <hours> per client", message: "Would help planning", page: "/overview" });
+    assert.equal(r.emailed, true);
+    assert.equal(mock.mails.length, 1);
+    assert.equal(mock.mails[0].toAddress, "zayhan@growthmak.com");
+    assert.equal(mock.mails[0].fromAddress, "zayhan@growthmak.com");
+    assert.match(mock.mails[0].subject, /\[Task Monitor · Feature request\] Show <hours> per client/);
+    assert.match(mock.mails[0].content, /Show &lt;hours&gt; per client/, "HTML in user text is escaped");
+    assert.match(mock.mails[0].content, /sandeep@growthmaksolutions.com/);
+    assert.equal((await prisma.feedback.findUnique({ where: { id: r.id } }))?.emailed, true);
+  });
+  await check("if the email fails, feedback is still saved with the error", async () => {
+    const user = (await prisma.user.findFirst({ where: { email: "sandeep@growthmaksolutions.com" } }))!;
+    const r = await submitFeedbackFor(user, { type: "PROBLEM", subject: "FAIL please", message: "Broken thing" });
+    assert.equal(r.emailed, false);
+    const fb = await prisma.feedback.findUnique({ where: { id: r.id } });
+    assert.ok(fb && !fb.emailed && /500/.test(fb.emailError ?? ""));
+  });
+
   await check("/healthz answers ok with the database up", async () => {
     const res = await health.GET();
     assert.deepEqual(await res.json(), { ok: true });
