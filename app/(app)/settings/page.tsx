@@ -123,7 +123,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           {users.some((u) => !u.active) && (
             <div className="mt-4">
               <div className="label mb-2">Removed from the dashboard</div>
-              <p className="text-xs text-ink-2 mb-2">Hidden from team tables, dashboards and sign-in. Their past tasks still count in client and overall totals.</p>
+              <p className="text-xs text-ink-2 mb-2">Hidden everywhere and can't sign in. Tasks assigned only to them are taken off the dashboard (numbers, Kanban, alerts and reports); on shared tasks their name is hidden. Restore brings it all back.</p>
               <div className="card divide-y divide-line">
                 {users.filter((u) => !u.active).map((u) => (
                   <div key={u.id} className="flex items-center justify-between p-3 text-sm">

@@ -48,12 +48,23 @@ export type Metrics = {
 
 export const ALL = "all";
 
+/**
+ * Tasks shown on the dashboard. People removed in Settings are taken out completely:
+ * tasks assigned only to them are dropped, and their names are hidden on shared tasks.
+ */
 export async function loadTasks(where: Prisma.TaskWhereInput = {}): Promise<FullTask[]> {
-  return prisma.task.findMany({
-    where: { deleted: false, project: { active: true }, ...where },
+  const tasks = await prisma.task.findMany({
+    where: {
+      deleted: false,
+      project: { active: true },
+      NOT: { AND: [{ assignees: { some: {} } }, { assignees: { every: { user: { active: false } } } }] },
+      ...where,
+    },
     include: taskInclude,
     orderBy: [{ dueDate: "asc" }, { name: "asc" }],
   });
+  for (const t of tasks) t.assignees = t.assignees.filter((a) => a.user.active);
+  return tasks;
 }
 
 /** Which tasks belong to a month, and what their state was in that month. */

@@ -9,7 +9,11 @@ import { fmtDate } from "../time";
 /** Re-score every open task (time moves even when Zoho doesn't) and post Cliq alerts on worsening. */
 export async function refreshConfidence(opts: { silent?: boolean; taskIds?: string[] } = {}): Promise<{ changed: number; alerts: number }> {
   const tasks = await prisma.task.findMany({
-    where: { deleted: false, ...(opts.taskIds ? { id: { in: opts.taskIds } } : {}) },
+    where: {
+      deleted: false,
+      NOT: { AND: [{ assignees: { some: {} } }, { assignees: { every: { user: { active: false } } } }] },
+      ...(opts.taskIds ? { id: { in: opts.taskIds } } : {}),
+    },
     include: { project: true, assignees: { include: { user: true } } },
   });
   const now = new Date();
@@ -42,7 +46,7 @@ export async function refreshConfidence(opts: { silent?: boolean; taskIds?: stri
     if (alert && cliqConfigured()) {
       const meta = CONFIDENCE_META[r.level];
       const client = clientOf(t, t.project).name;
-      const who = t.assignees.map((a) => a.user.name).join(", ") || "Unassigned";
+      const who = t.assignees.filter((a) => a.user.active).map((a) => a.user.name).join(", ") || "Unassigned";
       const owner = t.project.ownerName ?? t.createdByName ?? "—";
       const text = [
         `${r.level === "AT_RISK" ? "🔴" : "🟡"} *${meta.label}*: ${t.key ? `[${t.key}] ` : ""}${t.name}`,

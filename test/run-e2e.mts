@@ -197,12 +197,14 @@ async function main() {
     assert.equal(m.completed, 1);
     assert.equal(m.overdueOpen, 1);
   });
-  await check("people removed in Settings drop out of people views", async () => {
+  await check("people removed in Settings disappear with their tasks", async () => {
     const vahid = await prisma.user.findUnique({ where: { email: "vahid@growthmaksolutions.com" } });
     await prisma.user.update({ where: { id: vahid!.id }, data: { active: false } });
     const d = await periodData(currentMonth());
     assert.ok(!d.people.find((p) => p.name === "Vahid"));
-    assert.ok(d.metrics.total >= 6, "their tasks still count in totals");
+    assert.ok(!d.items.find((i) => i.task.id === "102"), "a task only Vahid had is gone");
+    assert.ok(!d.items.some((i) => i.task.assignees.some((a) => a.user.name === "Vahid")), "no Vahid names anywhere");
+    assert.ok(d.items.find((i) => i.task.id === "107"), "unassigned tasks stay");
     await prisma.user.update({ where: { id: vahid!.id }, data: { active: true } });
   });
   await check("periodData builds insights for the overview", async () => {
