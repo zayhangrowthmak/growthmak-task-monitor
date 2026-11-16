@@ -13,6 +13,10 @@ const isoDate = (offsetDays: number) => {
 export type Mock = {
   url: string;
   cliqPosts: string[];
+  cliqMessages: { text: string; id: string; thread?: string }[];
+  cliqFiles: string[];
+  writes: { method: string; path: string; body: any }[];
+  setTaskFields: (id: string, fields: Record<string, unknown>) => void;
   mails: { fromAddress: string; toAddress: string; subject: string; content: string }[];
   requests: string[];
   setTaskStatus: (id: string, status: { name: string; is_closed_type: boolean }) => void;
@@ -24,6 +28,11 @@ export async function startMock(): Promise<Mock> {
   const mails: Mock["mails"] = [];
   const requests: string[] = [];
   const statusOverride = new Map<string, { name: string; is_closed_type: boolean }>();
+  const fieldOverride = new Map<string, Record<string, unknown>>();
+  const cliqMessages: Mock["cliqMessages"] = [];
+  const cliqFiles: string[] = [];
+  const writes: Mock["writes"] = [];
+  let msgSeq = 0;
 
   const owner = (name: string, email: string, zpuid: string) => ({ owners_and_work: { owners: [{ zpuid, name, email }] } });
   const base = (id: string, extra: Record<string, unknown>) => ({
@@ -43,6 +52,7 @@ export async function startMock(): Promise<Mock> {
     ...owner("Sandeep", "Sandeep@GrowthmakSolutions.com", "z1"),
     ...extra,
     ...(statusOverride.get(id) ? { status: statusOverride.get(id) } : {}),
+    ...(fieldOverride.get(id) ?? {}),
   });
 
   const tasks = () => [
@@ -53,6 +63,14 @@ export async function startMock(): Promise<Mock> {
     base("107", { owners_and_work: { owners: [{ zpuid: "z0", name: "Unassigned User", email: "Unassigned User" }] } }), // placeholder owner
     base("105", { status: { name: "Completed", is_closed_type: true }, end_date: isoDate(-2), completed_time: new Date(Date.now() - 3 * DAY).toISOString() }),
     base("106", { status: { name: "Cancelled", is_closed_type: true } }), // must be excluded
+    base("108", { name: "Old landing page", end_date: isoDate(-45), created_time: new Date(Date.now() - 60 * DAY).toISOString() }), // open, from an earlier month
+    base("109", { name: "Podcast idea", status: { name: "Backlog", is_closed_type: false }, end_date: undefined }), // parked
+  ];
+  const STATUSES = [
+    { id: "s1", name: "In Progress", is_closed_type: false },
+    { id: "s2", name: "Backlog", is_closed_type: false },
+    { id: "s3", name: "Closed - Not needed", is_closed_type: true },
+    { id: "s4", name: "Completed", is_closed_type: true },
   ];
 
   const server = http.createServer((req, res) => {
@@ -83,7 +101,22 @@ export async function startMock(): Promise<Mock> {
         return json({ tasks: page === 1 ? all.slice(0, 3) : all.slice(3), page_info: { has_next_page: page === 1 } });
       }
       if (u.pathname === "/api/v3/portal/999/projects/12/tasks") return json({ tasks: [], page_info: { has_next_page: false } });
+      if (u.pathname === "/api/v3/portal/999/projects/11/statuses") return json({ statuses: STATUSES });
       const one = u.pathname.match(/^\/api\/v3\/portal\/999\/projects\/11\/tasks\/(\d+)$/);
+      if (one && req.method === "PATCH") {
+        const b = JSON.parse(body || "{}");
+        writes.push({ method: "PATCH", path: u.pathname, body: b });
+        const f = { ...(fieldOverride.get(one[1]) ?? {}) };
+        if ("end_date" in b) f.end_date = b.end_date || undefined;
+        fieldOverride.set(one[1], f);
+        const st = STATUSES.find((x) => x.id === b.status_id || x.id === b.status?.id || x.name === b.status);
+        if (st) statusOverride.set(one[1], { name: st.name, is_closed_type: st.is_closed_type });
+        return json({ tasks: [{ id: one[1] }] });
+      }
+      if (u.pathname.match(/\/tasks\/\d+\/comments$/) && req.method === "POST") {
+        writes.push({ method: "POST", path: u.pathname, body: JSON.parse(body || "{}") });
+        return json({ comments: [{ id: "c1" }] });
+      }
       if (one) {
         const t = tasks().find((x) => x.id === one[1]);
         return t ? json({ tasks: [t] }) : json({ error: "not found" }, 404);
@@ -97,8 +130,15 @@ export async function startMock(): Promise<Mock> {
       }
       if (u.pathname.startsWith("/api/v2/channelsbyname/")) {
         if (u.searchParams.get("zapikey") !== "mock-cliq-token") return json({ message: "bad token" }, 401);
-        cliqPosts.push(JSON.parse(body || "{}").text ?? "");
-        return json({});
+        if (u.pathname.endsWith("/files")) {
+          cliqFiles.push(body.includes("%PDF") ? "pdf" : "other");
+          return json({});
+        }
+        const m = JSON.parse(body || "{}");
+        const id = `m${++msgSeq}`;
+        cliqPosts.push(m.text ?? "");
+        cliqMessages.push({ text: m.text ?? "", id, thread: m.thread_message_id });
+        return json({ message_id: id });
       }
       json({ error: `mock has no ${u.pathname}` }, 404);
     });
@@ -108,6 +148,10 @@ export async function startMock(): Promise<Mock> {
   return {
     url: `http://127.0.0.1:${port}`,
     cliqPosts,
+    cliqMessages,
+    cliqFiles,
+    writes,
+    setTaskFields: (id, fields) => fieldOverride.set(id, { ...(fieldOverride.get(id) ?? {}), ...fields }),
     mails,
     requests,
     setTaskStatus: (id, status) => statusOverride.set(id, status),

@@ -23,6 +23,7 @@ export type NormTask = {
   createdAt?: Date;
   updatedAt?: Date;
   createdBy?: NormPerson;
+  modifiedBy?: string;
   owners: NormPerson[];
   tags: string[];
   clientFromTag?: string;
@@ -195,8 +196,11 @@ export function normalizeTask(t: any, projectId: string, portalName: string): No
 
   const id = String(first(t.id, t.id_string));
   const updatedAt = parseZohoDate(first(t.last_modified_time, t.last_updated_time_long, t.last_updated_time, t.modified_time));
-  let completedAt = parseZohoDate(first(t.completed_time, t.completed_time_long, t.completed_on, t.completed_date));
-  if (closed && !completedAt) completedAt = updatedAt;
+  // Real completion time only. We never fall back to "last modified": a closed task edited
+  // weeks later would otherwise look finished late (that was the 0%-on-time bug).
+  const completedAt = parseZohoDate(
+    first(t.completed_time, t.completed_time_long, t.completed_on, t.completed_date, t.completion_date, t.closed_time, t.status?.completed_time)
+  );
 
   return {
     id,
@@ -224,6 +228,7 @@ export function normalizeTask(t: any, projectId: string, portalName: string): No
     createdAt: parseZohoDate(first(t.created_time, t.created_time_long, t.created_date)),
     updatedAt,
     createdBy: person(first(t.created_by, t.created_person ? { name: t.created_person } : undefined)),
+    modifiedBy: first(t.last_modified_by?.name, t.modified_by?.name, t.updated_by?.name, t.last_updated_by?.name)?.toString(),
     owners,
     tags,
     clientFromTag: clientTag ? clientTag.replace(/^client\s*[:\-]\s*/i, "").trim() : undefined,

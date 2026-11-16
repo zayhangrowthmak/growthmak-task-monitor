@@ -42,6 +42,8 @@ export function Kpi({
   goodWhenUp = true,
   unit = "pts",
   vs = "vs last month",
+  small = false,
+  title,
 }: {
   label: string;
   value: string;
@@ -50,6 +52,8 @@ export function Kpi({
   goodWhenUp?: boolean;
   unit?: string;
   vs?: string;
+  small?: boolean; // below 5 tasks: grey the value and say so
+  title?: string;
 }) {
   let deltaEl = <span className="text-ink-3">no comparison</span>;
   if (delta !== undefined && delta !== null) {
@@ -65,9 +69,10 @@ export function Kpi({
     }
   }
   return (
-    <div className="card p-4 min-w-0">
+    <div className="card p-4 min-w-0" title={title}>
       <div className="label">{label}</div>
-      <div className="mt-1 text-3xl font-semibold tracking-tight">{value}</div>
+      <div className={`mt-1 text-3xl font-semibold tracking-tight ${small ? "text-ink-3" : ""}`}>{value}</div>
+      {small && <div className="text-[11px] text-ink-3">small sample</div>}
       {sub && <div className="mt-0.5 text-xs text-ink-2 num">{sub}</div>}
       <div className="mt-2 text-xs font-medium num">{deltaEl}</div>
     </div>
@@ -102,5 +107,41 @@ export function NavLink({ href, active, children }: { href: string; active?: boo
     <Link href={href} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${active ? "bg-brand-soft text-brand-dark" : "text-ink-2 hover:bg-plane"}`}>
       {children}
     </Link>
+  );
+}
+
+
+import type { Pct } from "@/lib/metrics";
+import { STATE_META, USER_CONFIDENCE, type TaskState } from "@/lib/status";
+
+/** "62% (18/29)". Greyed with a hint below 5 tasks. Never a bare percentage. */
+export function PctText({ p, className = "" }: { p: Pct; className?: string }) {
+  if (p.value === null) return <span className={`text-ink-3 ${className}`}>—</span>;
+  return (
+    <span className={`num ${p.small ? "text-ink-3" : ""} ${className}`} title={p.small ? "Small sample (fewer than 5 tasks)" : undefined}>
+      {p.value}% <span className="text-ink-3">({p.n}/{p.d})</span>
+    </span>
+  );
+}
+export const pctBig = (p: Pct) => (p.value === null ? "—" : `${Math.round(p.value)}%`);
+export const pctSub = (p: Pct) => `${p.n} of ${p.d}`;
+
+export function StatePill({ state, title }: { state: TaskState; title?: string }) {
+  const m = STATE_META[state];
+  return (
+    <span title={title} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap" style={{ background: m.color, color: m.text }}>
+      <span aria-hidden>{m.icon}</span>
+      {m.label}
+    </span>
+  );
+}
+
+export function ConfPill({ value }: { value: number | null | undefined }) {
+  if (!value) return <span className="text-[11px] text-ink-3 whitespace-nowrap">conf. not set</span>;
+  const m = USER_CONFIDENCE[value];
+  return (
+    <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap" style={{ background: m.color, color: m.text }} title="Confidence set by the assignee">
+      Conf. {m.label}
+    </span>
   );
 }

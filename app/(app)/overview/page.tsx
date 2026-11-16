@@ -1,180 +1,225 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
-import { ALL, periodData, trend } from "@/lib/metrics";
+import { ALL, monthData, previousFor, groupByPerson, groupByClient, buildInsights, trend, workload, type PersonRow, type Row } from "@/lib/metrics";
 import { resolvePeriod } from "@/lib/period";
-import { currentMonth, fmtDateTime } from "@/lib/time";
+import { currentMonth, fmtDate, fmtDateTime } from "@/lib/time";
 import { getState, prisma } from "@/lib/db";
+import { getSettings } from "@/lib/settings";
 import { MonthPicker } from "@/components/Pickers";
-import { Kpi, Bar, SectionTitle, ClientTypeBadge, pctText, Empty, StatusTag } from "@/components/ui";
-import { TrendChart, StatusMix, ReasonBars } from "@/components/Charts";
-import { ConfidencePill } from "@/components/ui";
+import { Kpi, Bar, SectionTitle, ClientTypeBadge, Empty, PctText, pctBig, StatePill } from "@/components/ui";
+import { TrendChart, ReasonBars } from "@/components/Charts";
+import { WorkloadStrip } from "@/components/Workload";
+import { slipLabel } from "@/lib/status";
 
 const toneStyle = { good: "text-goodText", crit: "text-crit", warn: "text-warnText", info: "text-ink-2" };
 const toneIcon = { good: "▲", crit: "▼", warn: "◆", info: "●" };
 
+const SORTS: Record<string, (p: PersonRow) => number | string> = {
+  name: (p) => p.name,
+  planned: (p) => p.metrics.planned,
+  completed: (p) => p.metrics.completed,
+  delivery: (p) => p.metrics.delivery.value ?? -1,
+  ontime: (p) => p.metrics.onTime.value ?? -1,
+  slipped: (p) => p.personSlipped,
+  waiting: (p) => p.metrics.waitingClient,
+  unplanned: (p) => p.metrics.unplannedDone,
+  old: (p) => p.metrics.oldPending,
+};
+
 export default async function Overview({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   await requireAdmin();
   const sp = await searchParams;
-  const { month, options, label } = await resolvePeriod(sp);
-  const d = await periodData(month);
+  const { month: picked, options, label } = await resolvePeriod(sp);
+  const month = picked === ALL ? currentMonth() : picked;
+  const settings = await getSettings();
+  const d = await monthData(month);
   const m = d.metrics;
-  const p = d.prev;
-  const tr = await trend(6, d.tasks, "overall", month === ALL ? currentMonth() : month);
+  const prev = await previousFor(d);
+  const people = await groupByPerson(d);
+  const clients = await groupByClient(d);
+  const insights = await buildInsights(d, prev, people, clients);
+  const tr = await trend(6, month, d.tasks);
+  const wl = workload(d, people);
   const lastSync = await getState("sync.last_ok");
-  const reviews = month === ALL ? [] : await prisma.monthlyReview.findMany({ where: { month } });
-  const ratingBy = new Map(reviews.map((r) => [r.userId, r.rating]));
-  const vs = d.live && month !== ALL ? "vs same day last month" : "vs last month";
-  const dl = (a: number | null | undefined, b: number | null | undefined) => (a === null || a === undefined || b === null || b === undefined || !p?.total ? null : a - b);
-  const watch = d.items
-    .filter((i) => !i.done && (i.task.confidence === "AT_RISK" || i.task.confidence === "TIGHT"))
-    .sort((a, b) => (a.task.confidence === b.task.confidence ? b.daysLate - a.daysLate : a.task.confidence === "AT_RISK" ? -1 : 1))
-    .slice(0, 8);
+  const reviews = await prisma.monthlyReview.findMany({ where: { month } });
+  const overallBy = new Map(
+    reviews.map((r) => {
+      const xs = [r.delivery, r.onTime, r.quality, r.ownership].filter((x): x is number => typeof x === "number");
+      return [r.userId, xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null];
+    })
+  );
+  const vs = d.live ? "vs same day last month" : "vs last month";
+  const dl = (a: number | null | undefined, b: number | null | undefined) => (a === null || a === undefined || b === null || b === undefined ? null : a - b);
+
+  // Needs attention: planned only, Client first, then nearest/most overdue
+  const attention = d.rows
+    .filter((r) => !r.done && ["OVERDUE", "AT_RISK", "TIGHT", "BLOCKED_CLIENT", "BLOCKED_INTERNAL"].includes(r.state))
+    .sort((a, b) => (a.clientType === b.clientType ? 0 : a.clientType === "CLIENT" ? -1 : 1) || (a.task.dueDate?.getTime() ?? 0) - (b.task.dueDate?.getTime() ?? 0))
+    .slice(0, 10);
+
+  const sortKey = SORTS[sp.sort ?? ""] ? sp.sort : "planned";
+  const dir = sp.dir === "asc" ? 1 : -1;
+  const sorted = [...people].sort((a, b) => {
+    const x = SORTS[sortKey](a), y = SORTS[sortKey](b);
+    return (x < y ? -1 : x > y ? 1 : 0) * (sortKey === "name" ? -dir : dir);
+  });
+  const sortHref = (k: string) => `?month=${month}&sort=${k}&dir=${sortKey === k && sp.dir !== "asc" ? "asc" : "desc"}`;
+  const Th = ({ k, children }: { k: string; children: React.ReactNode }) => (
+    <th><Link href={sortHref(k)} className="hover:text-brand">{children}{sortKey === k ? (sp.dir === "asc" ? " ↑" : " ↓") : ""}</Link></th>
+  );
+
+  const reasonFilter = sp.reason;
+  const reasonRows: Row[] = reasonFilter ? d.rows.filter((r) => r.task.slipReason === reasonFilter) : [];
+
+  let planLine = "";
+  if (d.virtual) planLine = "No stored plan for this month (before v2): planned = deliverables due in the month";
+  else if (d.plan?.status === "DRAFT") planLine = `Planning window — locks ${fmtDate(d.plan.locksAt)}`;
+  else if (d.plan) planLine = `Plan locked ${fmtDate(d.plan.lockedAt)}, ${m.planned} planned`;
 
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="label">Manager view</div>
-          <h1 className="text-2xl font-semibold tracking-tight">Team overview · {label}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Team overview · {picked === ALL ? label : label}</h1>
           <div className="text-xs text-ink-3 mt-1">
-            {d.live ? "Live" : "Month closed"} · Last Zoho sync {lastSync ? fmtDateTime(new Date(lastSync)) : "not yet"}
+            {planLine} · {d.live ? "Live" : "Month closed"} · Last Zoho sync {lastSync ? fmtDateTime(new Date(lastSync)) : "not yet"} · <Link href={`/plan?month=${month}`} className="text-brand hover:underline">Plan</Link>
           </div>
         </div>
-        <MonthPicker months={options} value={month} />
+        <MonthPicker months={options.filter((o) => o.value !== ALL)} value={month} />
       </div>
 
-      {!m.total ? (
-        <div className="mt-6"><Empty>No tasks fall in {label}. Pick another month, or check the Zoho sync in Settings.</Empty></div>
+      {!m.planned && !m.unplannedDone ? (
+        <div className="mt-6"><Empty>Nothing was planned for {label}. Pick another month, or check the Plan and the Zoho sync.</Empty></div>
       ) : (
         <>
           <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <Kpi vs={vs} label="Completed" value={pctText(m.completedPct)} sub={`${m.completed} of ${m.total} tasks`} delta={dl(m.completedPct, p?.completedPct)} />
-            <Kpi vs={vs} label="On time" value={pctText(m.onTimePct)} sub="of finished tasks with a due date" delta={dl(m.onTimePct, p?.onTimePct)} />
-            <Kpi vs={vs} label="Missed deadline" value={pctText(m.missedPct)} sub={`${m.missed} tasks · ${m.overdueOpen} open, ${m.finishedLate} late`} delta={dl(m.missedPct, p?.missedPct)} goodWhenUp={false} />
-            <Kpi vs={vs} label="Blocked / waiting" value={pctText(m.bucketPct.BLOCKED)} sub={`${m.buckets.BLOCKED} tasks`} delta={dl(m.bucketPct.BLOCKED, p?.bucketPct?.BLOCKED)} goodWhenUp={false} />
-            <Kpi vs={vs} label="In progress" value={pctText(m.bucketPct.IN_PROGRESS)} sub={`${m.buckets.IN_PROGRESS} in progress · ${m.buckets.REVIEW} in review`} delta={dl(m.bucketPct.IN_PROGRESS, p?.bucketPct?.IN_PROGRESS)} goodWhenUp={false} />
-            <Kpi vs={vs} label="Total tasks" value={String(m.total)} sub={`${m.carried} carried over · ${m.noDue} without due date`} delta={p?.total ? m.total - p.total : null} unit="tasks" />
+            <Kpi vs={vs} label="Client delivery" value={pctBig(m.client.delivery)} sub={`${m.client.completed} of ${m.client.planned} planned`} small={m.client.delivery.small} delta={dl(m.client.delivery.value, prev?.client.delivery.value)} />
+            <Kpi vs={vs} label="Internal delivery" value={pctBig(m.internal.delivery)} sub={`${m.internal.completed} of ${m.internal.planned} planned`} small={m.internal.delivery.small} delta={dl(m.internal.delivery.value, prev?.internal.delivery.value)} />
+            <Kpi vs={vs} label="On time" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)} title="Completed on or before the planned due date, out of completed deliverables with a known finish date" />
+            <Kpi vs={vs} label="Slipped" value={String(m.slipped)} sub={`${m.slipOpen} open · ${m.slipLate} late · ${m.slipMoved} moved`} delta={dl(m.slipped, prev?.slipped)} goodWhenUp={false} unit="tasks" />
+            <Kpi vs={vs} label="Waiting on client" value={String(m.waitingClient)} sub={`${m.blockedInternal} blocked internally`} delta={dl(m.waitingClient, prev?.waitingClient)} goodWhenUp={false} unit="tasks" />
+            <Kpi vs={vs} label="Unplanned work" value={String(m.unplannedDone)} sub="done, not in the plan" delta={dl(m.unplannedDone, prev?.unplannedDone)} unit="tasks" />
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
             <div className="card p-4">
               <div className="label mb-2">What stands out</div>
               <ul className="space-y-2">
-                {d.insights.map((i, k) => (
+                {insights.map((i, k) => (
                   <li key={k} className="flex gap-2 text-sm">
                     <span className={`${toneStyle[i.tone]} text-xs mt-0.5`} aria-hidden>{toneIcon[i.tone]}</span>
                     <span>{i.text}</span>
                   </li>
                 ))}
               </ul>
+              {d.live && m.oldPending > 0 && <Link href="/review" className="mt-3 inline-block text-sm text-brand hover:underline">Open the old-task review →</Link>}
             </div>
             <div className="card p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="label">Needs attention now</div>
-                <span className="text-xs text-ink-3">{m.atRisk} At Risk · {m.tight} Tight</span>
+                <span className="text-xs text-ink-3">Planned deliverables only · Client first</span>
               </div>
-              {watch.length ? (
+              {attention.length ? (
                 <ul className="divide-y divide-line">
-                  {watch.map((i) => (
-                    <li key={i.task.id} className="flex items-center gap-3 py-1.5 text-sm">
-                      <ConfidencePill level={i.task.confidence} />
-                      <Link href={`/tasks/${i.task.id}`} className="min-w-0 flex-1 truncate hover:text-brand" title={i.task.confidenceReason ?? ""}>
-                        {i.task.name} <span className="text-ink-3">· {i.client}</span>
+                  {attention.map((r) => (
+                    <li key={r.task.id} className="flex items-center gap-3 py-1.5 text-sm">
+                      <StatePill state={r.state} />
+                      <Link href={`/tasks/${r.task.id}`} className="min-w-0 flex-1 truncate hover:text-brand">
+                        {r.task.name} <span className="text-ink-3">· {r.client}</span>
                       </Link>
-                      <span className="text-xs text-ink-2 whitespace-nowrap">{i.task.assignees.map((a) => a.user.name).join(", ")}</span>
+                      <span className="text-xs text-ink-2 whitespace-nowrap">{r.task.assignees.map((a) => a.user.name).join(", ")}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-sm text-ink-3 py-4">{d.live ? "Nothing is Tight or At Risk right now." : "Confidence is tracked live for the current month."}</div>
+                <div className="text-sm text-ink-3 py-4">{d.live ? "No planned deliverable needs attention right now." : "Tracked live for the current month."}</div>
               )}
             </div>
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            <div className="card p-4">
-              <div className="label mb-2">Completion & on-time, last 6 months</div>
+            <div className="card p-4 lg:col-span-2">
+              <div className="label mb-2">Delivery & on-time, last 6 months</div>
               <TrendChart data={tr} />
             </div>
             <div className="card p-4">
-              <div className="label mb-3">Status mix by client</div>
-              <StatusMix rows={d.clients.slice(0, 10).map((c) => ({ name: c.name, buckets: c.metrics.buckets, total: c.metrics.total }))} />
-            </div>
-            <div className="card p-4">
               <div className="label mb-3">Why work is pending</div>
-              <ReasonBars rows={d.reasons} />
+              <ReasonBars rows={m.reasons.map((r) => ({ label: r.label, count: r.count, href: `?month=${month}&reason=${r.reason}#reason-list` }))} />
             </div>
           </div>
 
-          <SectionTitle right={<span className="text-xs text-ink-3">Click a name to open their dashboard</span>}>Team</SectionTitle>
+          {reasonFilter && (
+            <div id="reason-list" className="mt-4 card p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="label">Slip reason: {slipLabel(reasonFilter as never)} ({reasonRows.length})</div>
+                <Link href={`?month=${month}`} className="text-xs text-brand">Clear</Link>
+              </div>
+              <ul className="divide-y divide-line text-sm">
+                {reasonRows.map((r) => (
+                  <li key={r.task.id} className="flex items-center gap-3 py-1.5">
+                    <StatePill state={r.state} />
+                    <Link href={`/tasks/${r.task.id}`} className="flex-1 truncate hover:text-brand">{r.task.name} <span className="text-ink-3">· {r.client}</span></Link>
+                    <span className="text-xs text-ink-2">{r.task.slipNote}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <SectionTitle right={<span className="text-xs text-ink-3">Click a column to sort · waiting-on-client never counts as a person&apos;s slip</span>}>Team</SectionTitle>
           <div className="card overflow-x-auto">
             <table className="tbl w-full">
               <thead>
                 <tr>
-                  <th>Person</th><th>Tasks</th><th className="w-40">Completed</th><th>On time</th><th>Missed</th>
-                  <th>In progress</th><th>Blocked</th><th>Review</th><th>At risk</th><th>Rating</th><th>Clients</th>
+                  <Th k="name">Person</Th><Th k="planned">Planned</Th><Th k="completed">Completed</Th><Th k="delivery">Delivery</Th><Th k="ontime">On time</Th>
+                  <Th k="slipped">Slipped</Th><Th k="waiting">Waiting on client</Th><Th k="unplanned">Unplanned done</Th><Th k="old">Old pending</Th><th>Rating</th>
                 </tr>
               </thead>
               <tbody>
-                {d.people.map((pp) => (
-                  <tr key={pp.userId} className="hover:bg-plane/60">
-                    <td><Link href={`/people/${pp.userId}?month=${month}`} className="font-medium hover:text-brand">{pp.name}</Link></td>
-                    <td className="num">{pp.metrics.total}</td>
-                    <td><div className="flex items-center gap-2"><Bar value={pp.metrics.completedPct} /><span className="num text-xs w-11 text-right">{pp.metrics.completedPct}%</span></div></td>
-                    <td className="num">{pctText(pp.metrics.onTimePct)}</td>
-                    <td className={`num ${pp.metrics.missed ? "text-crit font-semibold" : ""}`}>{pp.metrics.missed}</td>
-                    <td className="num">{pp.metrics.buckets.IN_PROGRESS}</td>
-                    <td className={`num ${pp.metrics.buckets.BLOCKED ? "text-blockedText font-semibold" : ""}`}>{pp.metrics.buckets.BLOCKED}</td>
-                    <td className="num">{pp.metrics.buckets.REVIEW}</td>
-                    <td className="num">{d.live ? pp.metrics.atRisk : "—"}</td>
-                    <td className="num">{ratingBy.get(pp.userId) ? `${ratingBy.get(pp.userId)}/10` : "—"}</td>
-                    <td className="text-xs text-ink-2 max-w-[220px] truncate" title={pp.clients.join(", ")}>{pp.clients.join(", ")}</td>
+                {sorted.map((p) => (
+                  <tr key={p.userId} className="hover:bg-plane/60">
+                    <td>
+                      <Link href={`/people/${p.userId}?month=${month}`} className="font-medium hover:text-brand">{p.name}</Link>
+                      {p.clients.length > 0 && <div className="text-[11px] text-ink-3" title={p.clients.map((c) => `${c.name} ${c.completed}/${c.planned}`).join("\n")}>{p.clients.length} client{p.clients.length === 1 ? "" : "s"}</div>}
+                    </td>
+                    <td className="num">{p.metrics.planned}</td>
+                    <td className="num">{p.metrics.completed}</td>
+                    <td><div className="flex items-center gap-2 min-w-36"><Bar value={p.metrics.delivery.value ?? 0} /><PctText p={p.metrics.delivery} className="text-xs whitespace-nowrap" /></div></td>
+                    <td className="text-xs whitespace-nowrap"><PctText p={p.metrics.onTime} /></td>
+                    <td className={`num ${p.personSlipped ? "text-crit font-semibold" : ""}`}>{p.personSlipped}</td>
+                    <td className="num">{p.metrics.waitingClient}</td>
+                    <td className="num">{p.metrics.unplannedDone}</td>
+                    <td className={`num ${p.metrics.oldPending ? "text-warnText font-semibold" : ""}`}>{d.live ? p.metrics.oldPending : "—"}</td>
+                    <td className="num">{overallBy.get(p.userId) ? `${overallBy.get(p.userId)}/5` : "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <SectionTitle>By client</SectionTitle>
+          <SectionTitle right={<span className="text-xs text-ink-3">Open planned deliverables by due week</span>}>Workload</SectionTitle>
+          <WorkloadStrip weeks={wl.weeks} rows={wl.rows} green={settings.workloadGreen} amber={settings.workloadAmber} month={month} />
+
+          <SectionTitle right={<Link href={`/clients?month=${month}`} className="text-xs text-brand hover:underline">Clients page →</Link>}>By client</SectionTitle>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {d.clients.map((c) => (
-              <details key={c.name} className="card p-4 group">
-                <summary className="cursor-pointer list-none">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-semibold truncate">{c.name}</span>
-                      <ClientTypeBadge type={c.type} />
-                    </div>
-                    <span className="text-xs text-ink-3 group-open:rotate-180 transition">▾</span>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Bar value={c.metrics.completedPct} />
-                    <span className="num text-sm font-semibold w-12 text-right">{c.metrics.completedPct}%</span>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-ink-2 num">
-                    <span>{c.metrics.total} tasks</span>
-                    <span>{c.metrics.completed} done</span>
-                    <span className={c.metrics.missed ? "text-crit font-semibold" : ""}>{c.metrics.missed} missed</span>
-                    <span>{c.metrics.buckets.BLOCKED} blocked</span>
-                  </div>
-                  <div className="mt-3 space-y-1">
-                    {c.people.map((pp) => (
-                      <div key={pp.userId} className="flex items-center justify-between text-xs">
-                        <span>{pp.name}</span>
-                        <span className="text-ink-2 num">{pp.metrics.completed}/{pp.metrics.total} done · {pp.metrics.completedPct}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </summary>
-                <ul className="mt-3 border-t border-line pt-2 space-y-1.5">
-                  {c.items.map((i) => (
-                    <li key={i.task.id} className="flex items-center justify-between gap-2 text-xs">
-                      <Link href={`/tasks/${i.task.id}`} className="truncate hover:text-brand">{i.task.name}</Link>
-                      <StatusTag bucket={i.state} />
-                    </li>
-                  ))}
-                </ul>
-              </details>
+            {clients.map((c) => (
+              <Link key={c.name} href={`/clients?month=${month}#${encodeURIComponent(c.name)}`} className="card p-4 hover:border-brand">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold truncate">{c.name}</span>
+                  <ClientTypeBadge type={c.type} />
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Bar value={c.metrics.delivery.value ?? 0} />
+                  <PctText p={c.metrics.delivery} className="text-sm font-semibold whitespace-nowrap" />
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-ink-2 num">
+                  <span>{c.metrics.planned} planned</span>
+                  <span>{c.metrics.completed} done</span>
+                  <span className={c.metrics.slipped ? "text-crit font-semibold" : ""}>{c.metrics.slipped} slipped</span>
+                  <span>{c.metrics.waitingClient} waiting on client</span>
+                </div>
+              </Link>
             ))}
           </div>
         </>

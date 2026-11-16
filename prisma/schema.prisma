@@ -1,6 +1,7 @@
-// Growthmak Task Monitor — data model
-// Zoho Projects is the source of truth for tasks. The dashboard only adds:
-// computed confidence, per-task comments, monthly reviews/ratings, snapshots, reports.
+// Growthmak Task Monitor — data model (v2)
+// Zoho Projects is the source of truth for tasks. The dashboard adds: monthly Plans,
+// old-task reviews, confidence/slip reasons, reviews/ratings, reports and Cliq alerts.
+// Zoho is only written to through ZohoChange rows a manager has approved.
 
 generator client {
   provider = "prisma-client-js"
@@ -22,6 +23,62 @@ enum StatusBucket {
   BLOCKED
   REVIEW
   COMPLETED
+  BACKLOG // parked idea / future plan — never scored, never alerted
+  CLOSED // closed as not needed (not the same as Completed)
+}
+
+enum BlockedType {
+  CLIENT
+  INTERNAL
+}
+
+enum PlanStatus {
+  DRAFT
+  LOCKED
+}
+
+enum PlanSource {
+  DUE_DATE // due inside the month when the plan was drafted/locked
+  RECURRING // matched a recurring deliverable template
+  KEPT // old task re-committed in the monthly review
+  PROMOTED // added by a manager after lock (or during the window)
+}
+
+enum RemoveReason {
+  CLIENT_CANCELLED
+  SCOPE_CHANGE
+  MOVED_NEXT_MONTH
+  OTHER
+}
+
+enum ReviewDecision {
+  KEEP
+  BACKLOG
+  CLOSE
+}
+
+enum SlipReason {
+  CLIENT_INPUT
+  CLIENT_APPROVAL
+  SCOPE_CHANGE
+  CAPACITY
+  INTERNAL_DEPENDENCY
+  TECH_ISSUE
+  OTHER
+}
+
+enum ChangeKind {
+  UPDATE_DUE // set a new due date in Zoho
+  SET_STATUS // move to a status by name (Backlog, Closed - Not needed …)
+  CLEAR_DUE // remove the due date (Backlog)
+  CREATE_TASK // create a recurring deliverable
+}
+
+enum ChangeStatus {
+  PENDING
+  APPLIED
+  FAILED
+  REJECTED
 }
 
 enum Confidence {
@@ -56,6 +113,9 @@ model User {
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // Cliq @mention address if it differs from the Zoho email (Settings → Cliq mapping)
+  cliqEmail     String?
 
   assignments   TaskAssignee[]
   comments      TaskComment[]
@@ -114,6 +174,16 @@ model Task {
   // A person can raise a flag early from the dashboard (with a comment)
   flaggedAtRisk     Boolean    @default(false)
 
+  // v2 task meta (kept in the app, not in Zoho)
+  blockedType       BlockedType?
+  userConfidence    Int? // 1 At Risk, 2 Watch, 3 On Track — set by the assignee
+  userConfidenceAt  DateTime?
+  slipReason        SlipReason?
+  slipNote          String?
+  slipAt            DateTime?
+  // Completion time we observed ourselves (status flipped to done between two syncs)
+  observedDoneAt    DateTime?
+
   raw             Json?
   syncedAt        DateTime     @default(now())
 
@@ -157,8 +227,15 @@ model MonthlyReview {
   reviewerId String
   reviewer   User     @relation("reviewer", fields: [reviewerId], references: [id])
   month      String // YYYY-MM
-  rating     Int // 1–10
-  comment    String
+  rating     Int? // legacy 1–10 (v1)
+  comment    String  @default("")
+  // v2 rubric, each 1–5
+  delivery   Int?
+  onTime     Int?
+  quality    Int?
+  ownership  Int?
+  managerRemarks String?
+  cooRemarks     String?
   updatedAt  DateTime @updatedAt
   createdAt  DateTime @default(now())
 
@@ -233,4 +310,152 @@ model Feedback {
   createdAt  DateTime     @default(now())
 
   @@index([createdAt])
+}
+
+
+// ── v2: monthly planning ────────────────────────────────────────────────
+
+model MonthPlan {
+  id         String     @id @default(cuid())
+  month      String     @unique // YYYY-MM
+  status     PlanStatus @default(DRAFT)
+  locksAt    DateTime // end of the Nth working day
+  lockedAt   DateTime?
+  lockedById String?
+  createdAt  DateTime   @default(now())
+  items      PlanItem[]
+}
+
+model PlanItem {
+  id           String        @id @default(cuid())
+  planId       String
+  plan         MonthPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  taskId       String
+  plannedDue   DateTime? // due date at lock (or when added after lock)
+  source       PlanSource
+  addedAt      DateTime      @default(now())
+  addedById    String?
+  removedAt    DateTime?
+  removedReason RemoveReason?
+  removedNote  String?
+  removedById  String?
+
+  @@unique([planId, taskId])
+  @@index([taskId])
+}
+
+model DueDateChange {
+  id        String    @id @default(cuid())
+  taskId    String
+  oldDate   DateTime?
+  newDate   DateTime?
+  changedBy String? // name from Zoho or the dashboard user
+  source    String // sync | approval
+  changedAt DateTime  @default(now())
+
+  @@index([taskId])
+}
+
+model StatusChange {
+  id        String       @id @default(cuid())
+  taskId    String
+  from      StatusBucket?
+  to        StatusBucket
+  fromName  String?
+  toName    String
+  at        DateTime     @default(now())
+
+  @@index([taskId, at])
+}
+
+model OldTaskReview {
+  id          String          @id @default(cuid())
+  taskId      String
+  month       String // the month the decision is for
+  userId      String? // assignee the review belongs to
+  decision    ReviewDecision
+  newDueDate  DateTime?
+  note        String?
+  decidedById String
+  decidedAt   DateTime        @default(now())
+  // 3rd consecutive Keep needs a manager's OK before it joins the plan
+  needsApproval Boolean       @default(false)
+  approvedById  String?
+
+  @@unique([taskId, month])
+  @@index([month])
+}
+
+/// Every write to Zoho waits here until a manager approves it.
+model ZohoChange {
+  id          String       @id @default(cuid())
+  kind        ChangeKind
+  taskId      String?
+  projectId   String
+  payload     Json
+  summary     String // human-readable, e.g. "EUR-T234: due 25 Nov → 15 Dec"
+  source      String // review | recurring | plan
+  requestedById String?
+  requestedAt DateTime     @default(now())
+  status      ChangeStatus @default(PENDING)
+  decidedById String?
+  decidedAt   DateTime?
+  error       String?
+
+  @@index([status])
+}
+
+model RecurringTemplate {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String // matched against task names (contains, case-insensitive)
+  ownerUserId String?
+  dayOfMonth  Int      @default(28)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+// ── v2: Cliq ────────────────────────────────────────────────────────────
+
+/// One thread per task per month; we only post again when the state changes.
+model CliqMessage {
+  id        String   @id @default(cuid())
+  taskId    String
+  month     String
+  messageId String? // parent message id for thread replies, when Cliq returns one
+  lastState String // TIGHT | AT_RISK | OVERDUE | BLOCKED_CLIENT | BLOCKED_INTERNAL | DONE
+  sentAt    DateTime @default(now())
+
+  @@unique([taskId, month])
+}
+
+/// Outgoing Cliq posts. Quiet hours hold them until 09:00 IST.
+model CliqOutbox {
+  id        String    @id @default(cuid())
+  kind      String // alert | reply | review | report | checkin | digest | test
+  taskId    String?
+  month     String?
+  state     String?
+  text      String
+  fileMonth String? // attach the monthly PDF for this month
+  notBefore DateTime  @default(now())
+  sentAt    DateTime?
+  attempts  Int       @default(0)
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@index([sentAt, notBefore])
+}
+
+model AuditLog {
+  id       String   @id @default(cuid())
+  at       DateTime @default(now())
+  actorId  String?
+  actor    String?
+  action   String
+  entity   String
+  entityId String?
+  detail   Json?
+
+  @@index([at])
 }

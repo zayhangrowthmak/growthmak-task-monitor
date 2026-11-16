@@ -67,9 +67,16 @@ async function main() {
   const { prisma } = await import("../lib/db");
   const { fullSync, syncOneTask } = await import("../lib/zoho/sync");
   const { refreshConfidence } = await import("../lib/jobs/confidence");
-  const { loadTasks, monthView, computeMetrics, groupByClient, periodData } = await import("../lib/metrics");
+  const { loadTasks, monthData, groupByClient, groupByPerson } = await import("../lib/metrics");
+  const { refreshPlan, lockPlan } = await import("../lib/plan");
+  const { decide, applyChange, rejectChange } = await import("../lib/review");
+  const { runAlerts, postMonthlyReport } = await import("../lib/jobs/alerts");
+  const { flushOutbox, enqueue } = await import("../lib/cliq");
+  const { saveSettings } = await import("../lib/settings");
   const { closePreviousMonthIfNeeded, generateReport } = await import("../lib/jobs/monthEnd");
-  const { currentMonth, addMonths, monthRange } = await import("../lib/time");
+  const { currentMonth, addMonths, monthRange, IST_OFFSET_MS } = await import("../lib/time");
+  const DAY = 86_400_000;
+  const isoIst = (d: Date) => new Date(d.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
   const webhook = await import("../app/api/webhooks/zoho/route");
   const health = await import("../app/healthz/route");
   const { NextRequest } = await import("next/server");
@@ -78,7 +85,7 @@ async function main() {
   let detail = "";
   await check("full sync runs and reports counts", async () => {
     detail = await fullSync();
-    assert.match(detail, /2 active projects \(of 3 in Zoho\), 7 tasks, 0 alerts/);
+    assert.match(detail, /2 active projects \(of 3 in Zoho\), 9 tasks, 0 alerts/);
   });
   await check("archived projects are stored but not synced", async () => {
     const p = await prisma.project.findUnique({ where: { id: "13" } });
@@ -86,10 +93,13 @@ async function main() {
     assert.equal(await prisma.task.count({ where: { projectId: "13" } }), 0);
   });
   await check("pagination: tasks from both pages are stored", async () => {
-    assert.equal(await prisma.task.count({ where: { projectId: "11" } }), 7);
+    assert.equal(await prisma.task.count({ where: { projectId: "11" } }), 9);
   });
-  await check("cancelled tasks drop out of the numbers", async () => {
-    assert.equal((await prisma.task.findUnique({ where: { id: "106" } }))?.deleted, true);
+  await check("cancelled tasks are Closed and drop out of the numbers", async () => {
+    assert.equal((await prisma.task.findUnique({ where: { id: "106" } }))?.bucket, "CLOSED");
+    const d = await monthData(currentMonth());
+    assert.ok(!d.rows.find((r) => r.task.id === "106"));
+    assert.ok(d.closed.find((x) => x.id === "106"));
   });
 
   await check("list parsing accepts bare arrays and keyed objects", async () => {
@@ -116,6 +126,8 @@ async function main() {
     assert.equal((await t("102")).bucket, "BLOCKED");
     assert.equal((await t("104")).bucket, "REVIEW");
     assert.equal((await t("105")).bucket, "COMPLETED");
+    assert.equal((await t("109")).bucket, "BACKLOG");
+    assert.equal((await t("102")).blockedType, "CLIENT");
   });
   await check("HTML entities in names are decoded", async () => {
     assert.equal((await t("104")).name, "Google & Meta Ads");
@@ -129,10 +141,12 @@ async function main() {
     assert.equal(p?.zohoClientName, null);
   });
   await check("client tag wins over project; project custom field sets the type", async () => {
-    const tasks = await loadTasks();
-    const byClient = groupByClient(monthView(tasks, "all"), true);
-    assert.ok(byClient.find((c) => c.name === "AdinNYC" && c.type === "CLIENT"));
-    assert.ok(byClient.find((c) => c.name === "Eurofins" && c.type === "CLIENT"));
+    const { clientOf } = await import("../lib/clients");
+    const [a] = await loadTasks({ id: "101" });
+    const [b] = await loadTasks({ id: "103" });
+    assert.equal(clientOf(a, a.project).name, "AdinNYC");
+    assert.equal(clientOf(b, b.project).name, "Eurofins");
+    assert.equal(clientOf(b, b.project).type, "CLIENT");
     const gm = await prisma.project.findUnique({ where: { id: "12" } });
     assert.equal(gm?.zohoClientType, "INTERNAL");
   });
@@ -150,8 +164,8 @@ async function main() {
   });
   await check("second sync is idempotent", async () => {
     await fullSync();
-    assert.equal(await prisma.task.count(), 7);
-    assert.equal(await prisma.taskAssignee.count(), 6);
+    assert.equal(await prisma.task.count(), 9);
+    assert.equal(await prisma.taskAssignee.count(), 8);
     assert.equal(mock.cliqPosts.length, 0);
   });
   await check("two syncs at once: only one runs", async () => {
@@ -159,73 +173,198 @@ async function main() {
     assert.ok([a, b].some((r) => /already running/.test(r)), `got: ${a} | ${b}`);
   });
 
-  console.log("\nWebhook + Cliq");
+  console.log("\nWebhook");
   await check("webhook refuses a wrong secret", async () => {
     const res = await webhook.POST(new NextRequest("https://x/api/webhooks/zoho?secret=nope", { method: "POST", body: "{}" }));
     assert.equal(res.status, 401);
   });
-  await check("webhook re-syncs the task and posts one Cliq alert when it worsens", async () => {
+
+  // Fix the dates the v2 checks depend on to the last day of the current month
+  const cur = currentMonth();
+  const lastDay = isoIst(new Date(monthRange(cur).end.getTime() - DAY));
+  const lastDayDate = new Date(`${lastDay}T00:00:00+05:30`);
+  mock.setTaskFields("101", { end_date: lastDay });
+  mock.setTaskFields("104", { end_date: lastDay });
+  await fullSync();
+  await saveSettings({ quietStart: 0, quietEnd: 0 }); // no quiet hours while testing
+  const admin = await prisma.user.create({ data: { email: "mohammed@growthmaksolutions.com", name: "Mohammed", role: "ADMIN" } });
+  const sandeep = (await prisma.user.findFirst({ where: { email: "sandeep@growthmaksolutions.com" } }))!;
+
+  console.log("\nv2 · Plan, old tasks, backlog");
+  await check("plan is created as a draft with time left to plan", async () => {
+    const plan = await refreshPlan(cur, await loadTasks());
+    assert.equal(plan.status, "DRAFT");
+    assert.ok(plan.locksAt > new Date(), "a mid-month plan gets a planning window");
+    assert.ok(plan.items.find((i) => i.taskId === "101" && i.source === "DUE_DATE"));
+  });
+  await check("an old open task is excluded from this month and listed for review", async () => {
+    const d = await monthData(cur);
+    assert.ok(!d.rows.find((r) => r.task.id === "108"));
+    assert.ok(d.old.find((o) => o.task.id === "108" && !o.decision));
+    assert.equal(d.metrics.oldPending, 1);
+  });
+  await check("backlog tasks are never planned", async () => {
+    const d = await monthData(cur);
+    assert.ok(d.backlog.find((x) => x.id === "109"));
+    assert.ok(!d.rows.find((r) => r.task.id === "109"));
+  });
+  await check("Keep: counts in the plan at once, Zoho untouched until approved", async () => {
+    await decide(sandeep, { taskId: "108", month: cur, decision: "KEEP", newDueDate: lastDayDate, note: "client sent copy" });
+    assert.equal(mock.writes.length, 0, "no Zoho write yet");
+    const ch = await prisma.zohoChange.findMany({ where: { taskId: "108" } });
+    assert.equal(ch.length, 1);
+    assert.equal(ch[0].status, "PENDING");
+    await refreshPlan(cur, await loadTasks());
+    const d = await monthData(cur);
+    const row = d.rows.find((r) => r.task.id === "108");
+    assert.ok(row, "kept task joins the plan");
+    assert.equal(row!.source, "KEPT");
+    assert.equal(isoIst(row!.plannedDue!), lastDay);
+  });
+  await check("approving the change updates Zoho and re-reads the task", async () => {
+    const ch = (await prisma.zohoChange.findFirst({ where: { taskId: "108", status: "PENDING" } }))!;
+    const r = await applyChange(admin, ch.id);
+    assert.ok(r.ok, r.error);
+    const w = mock.writes.find((x) => x.path.endsWith("/tasks/108"));
+    assert.ok(w, "PATCH sent");
+    assert.match(String(w!.body.end_date), new RegExp(`^${lastDay}`));
+    assert.equal((await prisma.zohoChange.findUnique({ where: { id: ch.id } }))?.status, "APPLIED");
+    assert.equal(isoIst((await t("108")).dueDate!), lastDay);
+  });
+  await check("rejecting a change leaves Zoho alone and undoes the decision", async () => {
+    const before = mock.writes.length;
+    await decide(sandeep, { taskId: "108", month: cur, decision: "CLOSE", note: "not needed" });
+    const ch = (await prisma.zohoChange.findFirst({ where: { taskId: "108", status: "PENDING" } }))!;
+    await rejectChange(admin, ch.id);
+    assert.equal(mock.writes.length, before);
+    assert.equal((await prisma.zohoChange.findUnique({ where: { id: ch.id } }))?.status, "REJECTED");
+    assert.equal(await prisma.oldTaskReview.count({ where: { taskId: "108", month: cur } }), 0);
+  });
+  await check("audit log records decisions and approvals", async () => {
+    const actions = (await prisma.auditLog.findMany()).map((a) => a.action);
+    for (const a of ["review.keep", "zoho.apply", "review.close", "zoho.reject"]) assert.ok(actions.includes(a), `missing ${a}`);
+  });
+
+  console.log("\nv2 · Cliq");
+  await check("first run of the month is a silent baseline", async () => {
+    await runAlerts(new Date(), { silentBaseline: true });
+    await flushOutbox();
+    assert.equal(mock.cliqMessages.length, 0);
+  });
+  await check("blocked on client: one alert that tags the assignee and CCs Sandeep + Mohammed", async () => {
     mock.setTaskStatus("101", { name: "Blocked - waiting on client", is_closed_type: false });
     const res = await webhook.POST(
       new NextRequest("https://x/api/webhooks/zoho?secret=hook-secret", { method: "POST", body: JSON.stringify({ task_id: "101", project_id: "11" }) })
     );
     assert.equal(res.status, 200);
-    assert.equal((await t("101")).confidence, "AT_RISK");
-    assert.equal(mock.cliqPosts.length, 1);
-    assert.match(mock.cliqPosts[0], /At Risk.*EUR-T101/);
-    assert.match(mock.cliqPosts[0], /Client: AdinNYC/);
+    await flushOutbox();
+    assert.equal(mock.cliqMessages.length, 1, mock.cliqPosts.join("\n---\n"));
+    const m = mock.cliqMessages[0].text;
+    assert.match(m, /\[BLOCKED - CLIENT\]/);
+    assert.match(m, /AdinNYC/);
+    assert.match(m, /\{@sandeep@growthmaksolutions\.com\}/);
+    assert.match(m, /CC: \{@sandeep@growthmak\.com\} \{@mohammed@growthmak\.com\}/);
   });
-  await check("no repeat alert while a task stays At Risk", async () => {
+  await check("no repeat while the state stays the same", async () => {
     await syncOneTask("11", "101");
-    assert.equal(mock.cliqPosts.length, 1);
+    await syncOneTask("11", "101");
+    await flushOutbox();
+    assert.equal(mock.cliqMessages.length, 1);
   });
-  await check("more than 5 alerts at once become one digest", async () => {
-    const past = new Date(Date.now() - 5 * 86_400_000);
-    for (let i = 0; i < 6; i++) {
-      await prisma.task.create({
-        data: { id: `d${i}`, projectId: "11", name: `Digest ${i}`, zohoStatus: "In Progress", bucket: "IN_PROGRESS", dueDate: past, confidence: "ON_TRACK" },
-      });
-    }
-    await refreshConfidence();
-    assert.equal(mock.cliqPosts.length, 2);
-    assert.match(mock.cliqPosts[1], /6 tasks changed confidence/);
-    await prisma.task.deleteMany({ where: { id: { startsWith: "d" } } });
+  await check("completion is posted as a [DONE] reply in the alert's thread", async () => {
+    mock.setTaskStatus("101", { name: "Completed", is_closed_type: true });
+    mock.setTaskFields("101", { completed_time: new Date().toISOString() });
+    await syncOneTask("11", "101");
+    await flushOutbox();
+    assert.equal(mock.cliqMessages.length, 2);
+    const reply = mock.cliqMessages[1];
+    assert.match(reply.text, /^\[DONE\]/);
+    assert.match(reply.text, /on time/);
+    assert.equal(reply.thread, mock.cliqMessages[0].id);
+  });
+  await check("backlog tasks never alert", () => {
+    assert.ok(!mock.cliqMessages.some((m) => /Podcast idea/.test(m.text)));
+  });
+  await check("quiet hours hold posts until 09:00 IST", async () => {
+    await saveSettings({ quietStart: 20, quietEnd: 9 });
+    const night = new Date("2026-11-10T22:15:00+05:30");
+    const row = await enqueue({ kind: "test", text: "hold me", at: night });
+    assert.equal(row.notBefore.toISOString(), new Date("2026-11-11T09:00:00+05:30").toISOString());
+    await prisma.cliqOutbox.delete({ where: { id: row.id } });
+    await saveSettings({ quietStart: 0, quietEnd: 0 });
   });
 
-  console.log("\nMetrics, month end, report");
-  await check("current month metrics: counts, missed, completion", async () => {
-    const items = monthView(await loadTasks(), currentMonth());
-    const m = computeMetrics(items, true);
-    assert.equal(m.total, 6);
-    assert.equal(m.completed, 1);
-    assert.equal(m.overdueOpen, 1);
+  console.log("\nv2 · Metrics");
+  await check("a planned task moved out of the month counts as slipped (moved)", async () => {
+    await lockPlan(cur, await loadTasks(), admin);
+    mock.setTaskFields("104", { end_date: isoIst(new Date(monthRange(cur).end.getTime() + 10 * DAY)) });
+    await syncOneTask("11", "104");
+    const d = await monthData(cur);
+    const r = d.rows.find((x) => x.task.id === "104")!;
+    assert.ok(r, "still in the locked plan");
+    assert.equal(r.slip, "MOVED");
+    assert.equal(r.state, "MOVED");
+    assert.ok(d.metrics.slipMoved >= 1);
+    assert.ok(await prisma.dueDateChange.count({ where: { taskId: "104" } }) >= 1, "due change logged");
+  });
+  await check("percentages carry their counts and flag small samples", async () => {
+    const d = await monthData(cur);
+    const p = d.metrics.delivery;
+    assert.equal(p.d, d.metrics.planned);
+    assert.equal(p.n, d.metrics.completed);
+    assert.equal(p.small, p.d > 0 && p.d < 5);
+  });
+  await check("waiting on client is not counted against the person", async () => {
+    const d = await monthData(cur);
+    const vahidRow = d.rows.find((r) => r.task.id === "102");
+    if (vahidRow) assert.equal(vahidRow.waitingClient, vahidRow.task.bucket === "BLOCKED" && !vahidRow.done);
+    const people = await groupByPerson(d);
+    const v = people.find((p) => p.name === "Vahid");
+    if (v && vahidRow?.waitingClient) assert.ok(v.personSlipped <= v.metrics.slipped - 1 || v.metrics.slipped === 0);
   });
   await check("people removed in Settings disappear with their tasks", async () => {
     const vahid = await prisma.user.findUnique({ where: { email: "vahid@growthmaksolutions.com" } });
     await prisma.user.update({ where: { id: vahid!.id }, data: { active: false } });
-    const d = await periodData(currentMonth());
-    assert.ok(!d.people.find((p) => p.name === "Vahid"));
-    assert.ok(!d.items.find((i) => i.task.id === "102"), "a task only Vahid had is gone");
-    assert.ok(!d.items.some((i) => i.task.assignees.some((a) => a.user.name === "Vahid")), "no Vahid names anywhere");
-    assert.ok(d.items.find((i) => i.task.id === "107"), "unassigned tasks stay");
+    const d = await monthData(cur);
+    const people = await groupByPerson(d);
+    assert.ok(!people.find((p) => p.name === "Vahid"));
+    assert.ok(!d.tasks.find((x) => x.id === "102"), "a task only Vahid had is gone");
+    assert.ok(!d.tasks.some((x) => x.assignees.some((a) => a.user.name === "Vahid")));
     await prisma.user.update({ where: { id: vahid!.id }, data: { active: true } });
   });
-  await check("periodData builds insights for the overview", async () => {
-    const d = await periodData(currentMonth());
-    assert.ok(d.insights.length > 0);
-    assert.ok(d.people.find((p) => p.name === "Sandeep"));
+  await check("by-client view groups the plan", async () => {
+    const clients = await groupByClient(await monthData(cur));
+    assert.ok(clients.find((c) => c.name === "AdinNYC"));
   });
-  await check("month end: snapshot + PDF once, then no-op", async () => {
-    const last = addMonths(currentMonth(), -1);
+
+  console.log("\nMonth end, report");
+  await check("month end: report once, then no-op", async () => {
+    const last = addMonths(cur, -1);
     await prisma.task.create({
-      data: { id: "prev1", projectId: "11", name: "Last month task", zohoStatus: "Completed", bucket: "COMPLETED", isClosed: true, dueDate: new Date(monthRange(last).start.getTime() + 5 * 86_400_000), completedAt: new Date(monthRange(last).start.getTime() + 4 * 86_400_000), createdAtZoho: monthRange(last).start },
+      data: { id: "prev1", projectId: "11", name: "Last month task", zohoStatus: "Completed", bucket: "COMPLETED", isClosed: true, dueDate: new Date(monthRange(last).start.getTime() + 5 * DAY), completedAt: new Date(monthRange(last).start.getTime() + 4 * DAY), createdAtZoho: monthRange(last).start },
     });
     assert.equal(await closePreviousMonthIfNeeded(), last);
-    assert.ok(await prisma.monthlySnapshot.findUnique({ where: { month_scope: { month: last, scope: "overall" } } }));
+    assert.ok(await prisma.monthlyReport.findUnique({ where: { month: last } }));
     assert.equal(await closePreviousMonthIfNeeded(), null);
-    const pdf = await generateReport(last);
-    assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
   });
+  await check("report PDF renders for last month and the current month", async () => {
+    const pdf = await generateReport(addMonths(cur, -1));
+    assert.equal(pdf.subarray(0, 4).toString(), "%PDF");
+    const { renderReportPdf, renderClientPdf } = await import("../lib/report");
+    assert.equal(Buffer.from(await renderReportPdf(cur)).subarray(0, 4).toString(), "%PDF");
+    assert.equal(Buffer.from(await renderClientPdf(cur, "AdinNYC")).subarray(0, 4).toString(), "%PDF");
+  });
+  await check("monthly report post tags recipients and attaches the PDF", async () => {
+    const before = mock.cliqMessages.length;
+    await postMonthlyReport(addMonths(cur, -1));
+    await flushOutbox(generateReport);
+    const post = mock.cliqMessages[before];
+    assert.ok(post, "posted");
+    assert.match(post.text, /^\[MONTHLY REPORT\]/);
+    assert.match(post.text, /\{@mohammed@growthmak\.com\}/);
+    assert.deepEqual(mock.cliqFiles, ["pdf"]);
+  });
+
   console.log("\nFeedback");
   const { submitFeedbackFor } = await import("../lib/feedback");
   await check("feedback is saved and emailed to the admin via Zoho Mail", async () => {

@@ -5,7 +5,8 @@ import { zohoConnected } from "@/lib/zoho/client";
 import { cliqConfigured } from "@/lib/cliq";
 import { cleanProjectName } from "@/lib/clients";
 import { fmtDateTime } from "@/lib/time";
-import { syncNow, testCliq, setProjectClient, setRole, setUserActive } from "@/app/actions";
+import { syncNow, testCliq, setProjectClient, setRole, setUserActive, saveSettingsAction, setCliqEmail, addRecurring, toggleRecurring } from "@/app/actions";
+import { getSettings } from "@/lib/settings";
 import { ClientTypeBadge } from "@/components/ui";
 import { mailConnected } from "@/lib/mail";
 import { feedbackLabel } from "@/lib/feedback";
@@ -27,6 +28,15 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     getState("zohomail.account"),
   ]);
   const mailFrom = mailAcct ? (JSON.parse(mailAcct).fromAddress as string) : null;
+  const st = await getSettings();
+  const [templates, auditRows, zohoScopes] = await Promise.all([
+    prisma.recurringTemplate.findMany({ orderBy: [{ active: "desc" }, { title: "asc" }] }),
+    prisma.auditLog.findMany({ orderBy: { at: "desc" }, take: 40 }),
+    getState("zoho.scopes"),
+  ]);
+  const canWrite = !!zohoScopes && /tasks\.UPDATE/i.test(zohoScopes);
+  const projectName = new Map(projects.map((p) => [p.id, p.name]));
+  const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const webhookUrl = `${config.appUrl}/api/webhooks/zoho?secret=${config.zoho.webhookSecret ? "••••••" : "<set ZOHO_WEBHOOK_SECRET>"}`;
   const Ok = ({ ok }: { ok: boolean }) => <span className={`text-xs font-semibold ${ok ? "text-goodText" : "text-crit"}`}>{ok ? "✓ Ready" : "✕ Not set up"}</span>;
 
@@ -46,6 +56,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <div className="flex justify-between"><div className="font-semibold">Zoho Projects</div><Ok ok={connected} /></div>
           <p className="text-sm text-ink-2">Portal <b>{config.zoho.portalName}</b> on {config.zoho.apiBase.replace("https://", "")}. Full sync every {config.jobs.syncIntervalMin} min, plus instant updates from the webhook.</p>
           <div className="text-xs text-ink-3">Last successful sync: {lastOk ? fmtDateTime(new Date(lastOk)) : "never"}</div>
+          <div className={`text-xs ${canWrite ? "text-goodText" : "text-warnText"}`}>{canWrite ? "✓ Can apply approved changes (edit access)" : "Read-only connection — reconnect to allow approved changes to update Zoho"}</div>
           <div className="flex gap-2 pt-1">
             {zohoConfigured() ? <a href="/api/auth/login?purpose=connect" className="btn">{connected ? "Reconnect" : "Connect Zoho Projects"}</a> : <span className="text-xs text-crit">Set ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET first</span>}
             {connected && <form action={syncNow}><button className="btn btn-primary">Sync now</button></form>}
@@ -188,6 +199,127 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             ))}
             {!logs.length && <div className="p-3 text-sm text-ink-3">No jobs have run yet.</div>}
           </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-base font-semibold mb-1">Planning & alerts</h2>
+        <form action={saveSettingsAction} className="card p-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3 text-sm">
+          <label className="block">CC on every Cliq alert
+            <input name="ccEmails" defaultValue={st.ccEmails.join(", ")} className="mt-1 w-full" />
+            <span className="text-[11px] text-ink-3">Emails, comma separated</span>
+          </label>
+          <label className="block">Tagged on the monthly report
+            <input name="reportRecipients" defaultValue={st.reportRecipients.join(", ")} className="mt-1 w-full" />
+          </label>
+          <div className="flex gap-3">
+            <label className="block">Quiet from
+              <input type="number" min={0} max={23} name="quietStart" defaultValue={st.quietStart} className="mt-1 w-20" />
+            </label>
+            <label className="block">until
+              <input type="number" min={0} max={23} name="quietEnd" defaultValue={st.quietEnd} className="mt-1 w-20" />
+            </label>
+            <label className="block">Report post hour (1st)
+              <input type="number" min={0} max={23} name="reportPostHour" defaultValue={st.reportPostHour} className="mt-1 w-20" />
+            </label>
+          </div>
+          <fieldset className="space-y-1">
+            <legend className="mb-1">Cliq posts</legend>
+            <label className="flex items-center gap-2"><input type="checkbox" name="alertsEnabled" defaultChecked={st.alertsEnabled} /> Task alerts (planned deliverables, one per state change)</label>
+            <label className="flex items-center gap-2"><input type="checkbox" name="checkinEnabled" defaultChecked={st.checkinEnabled} /> Monday confidence check-in</label>
+            <label className="flex items-center gap-2"><input type="checkbox" name="digestEnabled" defaultChecked={st.digestEnabled} /> Weekday 09:00 morning digest</label>
+          </fieldset>
+          <div className="flex flex-wrap gap-3">
+            <label className="block">Plan locks at end of working day
+              <input type="number" min={1} max={10} name="lockWorkingDay" defaultValue={st.lockWorkingDay} className="mt-1 w-20" />
+            </label>
+            <label className="block">Max Keep months in a row
+              <input type="number" min={1} max={12} name="maxKeepMonths" defaultValue={st.maxKeepMonths} className="mt-1 w-20" />
+            </label>
+          </div>
+          <fieldset>
+            <legend className="mb-1">Working days</legend>
+            <div className="flex flex-wrap gap-2">{DAYS.map((d, i) => <label key={d} className="flex items-center gap-1"><input type="checkbox" name="workingDays" value={i} defaultChecked={st.workingDays.includes(i)} />{d}</label>)}</div>
+          </fieldset>
+          <div className="flex gap-3">
+            <label className="block">Workload green ≤
+              <input type="number" min={1} name="workloadGreen" defaultValue={st.workloadGreen} className="mt-1 w-20" />
+            </label>
+            <label className="block">amber ≤
+              <input type="number" min={1} name="workloadAmber" defaultValue={st.workloadAmber} className="mt-1 w-20" />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <label className="block">Zoho status for Backlog
+              <input name="backlogStatusName" defaultValue={st.backlogStatusName} className="mt-1 w-44" />
+            </label>
+            <label className="block">Zoho status for Close
+              <input name="closedStatusName" defaultValue={st.closedStatusName} className="mt-1 w-44" />
+            </label>
+          </div>
+          <label className="flex items-center gap-2"><input type="checkbox" name="includeRatingsInClientPdf" defaultChecked={st.includeRatingsInClientPdf} /> Include ratings in client PDF</label>
+          <div className="md:col-span-2 xl:col-span-3"><button className="btn btn-primary">Save settings</button></div>
+        </form>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <h2 className="text-base font-semibold mb-1">Cliq mapping</h2>
+          <p className="text-sm text-ink-2 mb-3">Alerts @mention people by their Zoho email. If someone&apos;s Cliq address is different, set it here.</p>
+          <div className="card divide-y divide-line">
+            {users.filter((u) => u.active).map((u) => (
+              <form key={u.id} action={setCliqEmail} className="flex flex-wrap items-center gap-2 p-2.5 text-sm">
+                <input type="hidden" name="userId" value={u.id} />
+                <span className="w-40 truncate font-medium">{u.name}</span>
+                <span className="text-xs text-ink-3 w-48 truncate">{u.email}</span>
+                <input name="cliqEmail" defaultValue={u.cliqEmail ?? ""} placeholder="same as Zoho" className="flex-1 min-w-40" />
+                <button className="btn">Save</button>
+              </form>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h2 className="text-base font-semibold mb-1">Recurring deliverables</h2>
+          <p className="text-sm text-ink-2 mb-3">Monthly retainer work (e.g. &quot;Google Ads Maintenance&quot;, &quot;4 Blogs&quot;). Any task in the project whose name contains the title is always planned.</p>
+          <form action={addRecurring} className="card p-3 flex flex-wrap gap-2 text-sm">
+            <select name="projectId" required defaultValue="" className="min-w-44">
+              <option value="" disabled>Project…</option>
+              {projects.filter((p) => p.active).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <input name="title" required minLength={3} placeholder="Title, e.g. Google Ads Maintenance" className="flex-1 min-w-48" />
+            <select name="ownerUserId" defaultValue="">
+              <option value="">Owner (optional)</option>
+              {users.filter((u) => u.active).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <input type="number" name="dayOfMonth" min={1} max={31} defaultValue={28} className="w-20" aria-label="Due day of month" />
+            <button className="btn btn-primary">Add</button>
+          </form>
+          <div className="mt-2 card divide-y divide-line">
+            {templates.map((t) => (
+              <form key={t.id} action={toggleRecurring} className={`flex items-center gap-2 p-2.5 text-sm ${t.active ? "" : "opacity-50"}`}>
+                <input type="hidden" name="id" value={t.id} />
+                <input type="hidden" name="active" value={t.active ? "false" : "true"} />
+                <span className="flex-1">{t.title} <span className="text-ink-3">· {projectName.get(t.projectId)} · due day {t.dayOfMonth}</span></span>
+                <button className="btn">{t.active ? "Turn off" : "Turn on"}</button>
+              </form>
+            ))}
+            {!templates.length && <div className="p-3 text-sm text-ink-3">No recurring deliverables yet.</div>}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-base font-semibold mb-3">Audit log</h2>
+        <div className="card divide-y divide-line">
+          {auditRows.map((a) => (
+            <div key={a.id} className="flex flex-wrap gap-3 p-2.5 text-xs">
+              <span className="text-ink-3 w-36">{fmtDateTime(a.at)}</span>
+              <span className="w-32 font-medium">{a.actor}</span>
+              <span className="w-40 font-mono">{a.action}</span>
+              <span className="flex-1 truncate text-ink-2" title={JSON.stringify(a.detail)}>{a.detail ? JSON.stringify(a.detail).slice(0, 160) : ""}</span>
+            </div>
+          ))}
+          {!auditRows.length && <div className="p-3 text-sm text-ink-3">Nothing logged yet.</div>}
         </div>
       </div>
     </div>

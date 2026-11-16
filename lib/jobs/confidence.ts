@@ -37,7 +37,7 @@ export async function refreshConfidence(opts: { silent?: boolean; taskIds?: stri
     );
     if (r.level === t.confidence && r.reason === t.confidenceReason) continue;
     changed++;
-    const alert = !opts.silent && shouldAlert(t.confidence, r.level);
+    const alert = false && !opts.silent && shouldAlert(t.confidence, r.level); // v2: alerts moved to lib/jobs/alerts.ts
     await prisma.task.update({
       where: { id: t.id },
       data: { confidence: r.level, confidenceReason: r.reason, confidenceAt: now, ...(r.level === "DONE" ? { flaggedAtRisk: false } : {}) },

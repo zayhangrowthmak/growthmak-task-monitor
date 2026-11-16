@@ -61,6 +61,19 @@ export async function zget<T = any>(path: string, params: Record<string, string 
   return (text ? JSON.parse(text) : {}) as T;
 }
 
+/** POST / PATCH to Zoho (only used for approved changes). */
+export async function zsend<T = any>(method: "POST" | "PATCH", path: string, body: unknown): Promise<T> {
+  await throttle();
+  const res = await fetch(`${config.zoho.apiBase}${path}`, {
+    method,
+    headers: { Authorization: `Zoho-oauthtoken ${await accessToken()}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Zoho ${method} ${path} → ${res.status}: ${text.slice(0, 300)}`);
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
 /** Pull the list out of a Zoho response: a bare array, json[key], or the first array-valued property. */
 export function listFrom(json: any, key: string): any[] {
   if (Array.isArray(json)) return json;

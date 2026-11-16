@@ -2,7 +2,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma, getState, setState } from "../db";
 import { config } from "../config";
-import { bucketFor } from "../status";
+import { bucketFor, blockedTypeFor } from "../status";
 import { zgetAll, zget, resolvePortalId, listFrom } from "./client";
 import { normalizeProject, normalizeTask, type NormPerson, type NormTask } from "./normalize";
 import { refreshConfidence } from "../jobs/confidence";
@@ -24,8 +24,15 @@ async function upsertPerson(p: NormPerson): Promise<string | null> {
   return user.id;
 }
 
-async function saveTask(n: NormTask, raw: any) {
+const sameDay = (a?: Date | null, b?: Date | null) =>
+  (!a && !b) || (a && b && Math.abs(a.getTime() - b.getTime()) < 60_000);
+
+export async function saveTask(n: NormTask, raw: any) {
   const bucket = bucketFor(n.statusName, n.isClosed);
+  const prev = await prisma.task.findUnique({ where: { id: n.id }, select: { bucket: true, zohoStatus: true, dueDate: true, observedDoneAt: true } });
+  const done = bucket === "COMPLETED";
+  // When a task flips to done between two syncs and Zoho gives no completion time, remember when we saw it
+  const observedDoneAt = done ? (prev?.observedDoneAt ?? (prev && prev.bucket !== "COMPLETED" ? new Date() : null)) : null;
   const data = {
     projectId: n.projectId,
     key: n.key,
@@ -34,7 +41,9 @@ async function saveTask(n: NormTask, raw: any) {
     zohoStatus: n.statusName,
     zohoStatusColor: n.statusColor,
     bucket: bucket ?? "READY",
-    isClosed: n.isClosed || bucket === "COMPLETED",
+    isClosed: n.isClosed || done,
+    blockedType: blockedTypeFor(n.statusName, bucket),
+    observedDoneAt,
     startDate: n.startDate ?? null,
     dueDate: n.dueDate ?? null,
     completedAt: n.completedAt ?? null,
@@ -47,11 +56,24 @@ async function saveTask(n: NormTask, raw: any) {
     tags: n.tags,
     clientFromTag: n.clientFromTag ?? null,
     url: n.url,
-    deleted: bucket === null, // cancelled statuses drop out of the numbers
+    deleted: bucket === null, // only statuses mapped to IGNORE drop out entirely
     raw: raw as Prisma.InputJsonValue,
     syncedAt: new Date(),
   };
   await prisma.task.upsert({ where: { id: n.id }, create: { id: n.id, ...data }, update: data });
+
+  if (prev) {
+    if (!sameDay(prev.dueDate, n.dueDate ?? null)) {
+      await prisma.dueDateChange.create({
+        data: { taskId: n.id, oldDate: prev.dueDate, newDate: n.dueDate ?? null, changedBy: n.modifiedBy ?? null, source: "sync" },
+      });
+    }
+    if (bucket && prev.bucket !== bucket) {
+      await prisma.statusChange.create({ data: { taskId: n.id, from: prev.bucket, to: bucket, fromName: prev.zohoStatus, toName: n.statusName } });
+    }
+  } else if (bucket) {
+    await prisma.statusChange.create({ data: { taskId: n.id, from: null, to: bucket, toName: n.statusName, at: n.updatedAt ?? new Date() } });
+  }
 
   const userIds = (await Promise.all(n.owners.map(upsertPerson))).filter(Boolean) as string[];
   await prisma.$transaction([
@@ -147,4 +169,6 @@ export async function syncOneTask(projectId: string, taskId: string): Promise<vo
     else throw e;
   }
   await refreshConfidence({ taskIds: [taskId] });
+  const { runAlerts } = await import("../jobs/alerts");
+  await runAlerts().catch((e) => console.error("[cliq] alerts after webhook failed", e));
 }

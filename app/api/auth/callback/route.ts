@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
     if (u?.role !== "ADMIN") return fail("not_admin");
     if (!tok.refresh_token) return NextResponse.redirect(`${config.appUrl}/settings?zoho=no_refresh_token`);
     await setState("zoho.refresh_token", tok.refresh_token);
+    await setState("zoho.scopes", config.zoho.syncScopes);
     clearTokenCache();
     fullSync().catch((e) => console.error("[sync] after connect failed:", e));
     return NextResponse.redirect(`${config.appUrl}/settings?zoho=connected`);

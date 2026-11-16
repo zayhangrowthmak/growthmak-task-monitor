@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
 import { MainNav, ThemeToggle } from "@/components/Header";
 import { FeedbackButton } from "@/components/Feedback";
@@ -8,14 +9,23 @@ import { Logo } from "@/components/Logo";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const admin = user.role === "ADMIN";
+  const pendingApprovals = admin ? await prisma.zohoChange.count({ where: { status: { in: ["PENDING", "FAILED"] } } }) : 0;
   const nav = admin
     ? [
         { href: "/overview", label: "Overview" },
         { href: "/people", label: "Individual" },
+        { href: "/clients", label: "Clients" },
+        { href: "/plan", label: "Plan" },
+        { href: "/review", label: "Review" },
+        { href: "/approvals", label: pendingApprovals ? `Approvals (${pendingApprovals})` : "Approvals" },
         { href: "/reports", label: "Reports" },
         { href: "/settings", label: "Settings" },
       ]
-    : [{ href: "/me", label: "My dashboard" }];
+    : [
+        { href: "/me", label: "My dashboard" },
+        { href: "/review", label: "Review" },
+        { href: "/backlog", label: "Backlog" },
+      ];
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur">

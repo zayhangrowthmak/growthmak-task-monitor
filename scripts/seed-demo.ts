@@ -159,7 +159,8 @@ async function main() {
         await prisma.task.create({
           data: {
             id, projectId, key, name: title, description: `Deliverable for ${pname} — ${title}.`,
-            zohoStatus: { READY: "Ready", IN_PROGRESS: "In Progress", BLOCKED: "Blocked / Waiting", REVIEW: "Review / QA", COMPLETED: "Completed" }[bucket],
+            zohoStatus: ({ READY: "Ready", IN_PROGRESS: "In Progress", BLOCKED: "Blocked / Waiting", REVIEW: "Review / QA", COMPLETED: "Completed", BACKLOG: "Backlog", CLOSED: "Closed - Not needed" } as Record<string, string>)[bucket],
+            blockedType: bucket === "BLOCKED" ? (rnd() < 0.6 ? "CLIENT" : "INTERNAL") : null,
             bucket, isClosed: closed, startDate, dueDate: noDue ? null : due, completedAt, completionPct: pct,
             loggedHours: Math.round(rnd() * 20 * 10) / 10, createdAtZoho: new Date(startDate.getTime() - DAY),
             updatedAtZoho: completedAt ?? now, createdByName: "Aakash", createdByEmail: "aakash@growthmaksolutions.com",

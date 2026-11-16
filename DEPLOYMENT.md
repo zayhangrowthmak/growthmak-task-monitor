@@ -242,3 +242,42 @@ README.md               full manual
    - Append `task_id` and `project_id`
    - Attach it to a workflow rule on task create and update.
 9. **Verify** (§6), then fill in the `‹…›` values at the top of this file and commit it.
+
+---
+
+## Upgrading to v2 (monthly plan, old-task review, approvals)
+
+Pushing v2 is enough for the code: on start, `prisma migrate deploy` applies the
+`v2_planning` migration. It only adds tables and columns, so no data is lost and
+old v1 review comments carry over as Manager remarks.
+
+After the deploy is green, do these once:
+
+1. **Reconnect Zoho with edit access.** Settings → Zoho Projects → Reconnect. v2 asks
+   for `ZohoProjects.tasks.UPDATE` and `.CREATE` so that *approved* changes can update
+   Zoho. Until you approve a change on the Approvals page, nothing is written to Zoho.
+2. **Create four task statuses in Zoho Projects** (Setup → Projects → Task statuses; add
+   them to each layout used by client projects): `Backlog`, `Closed - Not needed`
+   (closed type), `Blocked - Client`, `Blocked - Internal`. The Backlog and Close names
+   can be changed in Settings → Planning & alerts if you prefer other names.
+3. **Cliq channel: allow threads.** In the #delivery-alerts channel settings set the reply
+   mode to *Threads* (or *Allow both*), so updates for a task go into its alert's thread.
+   If threads are off, the updates are posted as plain messages instead.
+4. **Settings → Recurring deliverables:** add the monthly retainer items
+   (e.g. "Google Ads Maintenance", "4 Blogs") so they're always in the plan.
+5. **Settings → Cliq mapping:** only if someone's Cliq address differs from their Zoho email.
+
+### How the month works in v2
+- The plan for a month is built from tasks due in it, recurring deliverables and old
+  tasks someone chose to **Keep**. It locks at the end of the 3rd working day (Settings).
+  A plan first created mid-month (the v2 deploy) gets 3 working days before it locks.
+- After the lock, newly due tasks are **Unplanned** until a manager promotes them on the
+  Plan page. Removing a planned task needs a reason and shows in the report.
+- **Review** lists open tasks from earlier months: Keep (pick a date) / Backlog / Close.
+  The decision counts in the dashboard straight away; Zoho changes wait on **Approvals**.
+  Rejecting a change undoes the decision. Keeping a task a 3rd month in a row needs a manager's OK.
+- Cliq: one alert per state change for planned tasks only, assignee tagged and CC list
+  from Settings; quiet hours 20:00–09:00 IST; report + PDF on the 1st at 10:00; Monday check-in.
+
+`/api/zoho/debug` (admin only) now also shows the date fields of one closed task, so you can
+confirm which field Zoho uses for the completion time.

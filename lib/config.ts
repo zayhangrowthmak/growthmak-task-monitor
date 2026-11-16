@@ -29,7 +29,7 @@ export const config = {
     refreshToken: process.env.ZOHO_REFRESH_TOKEN ?? "",
     syncScopes:
       process.env.ZOHO_SYNC_SCOPES ??
-      "ZohoProjects.portals.READ,ZohoProjects.projects.READ,ZohoProjects.tasks.READ,ZohoProjects.users.READ,ZohoProjects.timesheets.READ",
+      "ZohoProjects.portals.READ,ZohoProjects.projects.READ,ZohoProjects.tasks.READ,ZohoProjects.tasks.UPDATE,ZohoProjects.tasks.CREATE,ZohoProjects.users.READ,ZohoProjects.timesheets.READ",
     loginScopes: process.env.ZOHO_LOGIN_SCOPES ?? "AaaServer.profile.Read",
     webhookSecret: process.env.ZOHO_WEBHOOK_SECRET ?? "",
     // Project custom-field labels to read the client name/type from (case-insensitive)

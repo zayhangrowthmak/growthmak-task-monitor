@@ -3,37 +3,49 @@ import { useState } from "react";
 import { BUCKETS, BUCKET_COLOR } from "@/lib/status";
 import type { StatusBucket } from "@prisma/client";
 
-type TrendPoint = { label: string; completedPct: number; onTimePct: number | null; total: number };
+type TrendPoint = { label: string; client: number | null; internal: number | null; onTime: number | null; planned: number };
+type SeriesKey = "client" | "internal" | "onTime";
 
-/** Completion % and On-time % over recent months (one 0–100% axis, two series, legend + end labels). */
+/** Delivery (Client, Internal) and On-time over recent months on one 0–100% axis. Empty months stay as gaps. */
 export function TrendChart({ data }: { data: TrendPoint[] }) {
   const [hover, setHover] = useState<number | null>(null);
-  const W = 520, H = 200, L = 34, R = 56, T = 12, B = 26;
+  const W = 520, H = 210, L = 34, R = 56, T = 12, B = 26;
   const iw = W - L - R, ih = H - T - B;
   const x = (i: number) => L + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw);
   const y = (v: number) => T + ih - (v / 100) * ih;
-  const series = [
-    { key: "completedPct" as const, name: "Completed", color: "var(--c-series-1)" },
-    { key: "onTimePct" as const, name: "On time", color: "var(--c-series-2)" },
+  const series: { key: SeriesKey; name: string; color: string; dash?: string }[] = [
+    { key: "client", name: "Client delivery", color: "var(--c-series-1)" },
+    { key: "internal", name: "Internal delivery", color: "#6250d6" },
+    { key: "onTime", name: "On time", color: "var(--c-series-2)", dash: "4 3" },
   ];
-  const path = (k: "completedPct" | "onTimePct") =>
-    data
-      .map((d, i) => (d[k] === null ? null : `${x(i)},${y(d[k] as number)}`))
-      .filter(Boolean)
-      .map((p, i) => `${i ? "L" : "M"}${p}`)
-      .join(" ");
-  const last = data.length - 1;
+  // Split into segments so a missing month leaves a gap instead of a misleading line
+  const segments = (k: SeriesKey) => {
+    const out: string[] = [];
+    let cur: string[] = [];
+    data.forEach((d, i) => {
+      if (d[k] === null) {
+        if (cur.length) out.push(cur.join(" "));
+        cur = [];
+      } else cur.push(`${cur.length ? "L" : "M"}${x(i)},${y(d[k] as number)}`);
+    });
+    if (cur.length) out.push(cur.join(" "));
+    return out;
+  };
+  const lastIdx = (k: SeriesKey) => {
+    for (let i = data.length - 1; i >= 0; i--) if (data[i][k] !== null) return i;
+    return -1;
+  };
   return (
     <div className="relative">
-      <div className="flex gap-4 text-xs text-ink-2 mb-1">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2 mb-1">
         {series.map((s) => (
           <span key={s.key} className="inline-flex items-center gap-1.5">
-            <span className="h-0.5 w-4 rounded" style={{ background: s.color }} />
+            <svg width="16" height="4" aria-hidden><line x1="0" y1="2" x2="16" y2="2" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash} /></svg>
             {s.name}
           </span>
         ))}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Completion and on-time percentage by month">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Delivery and on-time rate by month">
         {[0, 25, 50, 75, 100].map((v) => (
           <g key={v}>
             <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke={v === 0 ? "var(--c-axis)" : "var(--c-grid)"} strokeWidth={1} />
@@ -46,41 +58,23 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
         {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={T + ih} stroke="var(--c-axis)" strokeDasharray="3 3" />}
         {series.map((s) => (
           <g key={s.key}>
-            <path d={path(s.key)} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-            {data.map((d, i) =>
-              d[s.key] === null ? null : (
-                <circle key={i} cx={x(i)} cy={y(d[s.key] as number)} r={hover === i ? 5 : 4} fill={s.color} stroke="var(--c-surface)" strokeWidth={2} />
-              )
-            )}
-            {data[last]?.[s.key] !== null && data[last] && (
-              <text x={x(last) + 9} y={y(data[last][s.key] as number) + 4} fontSize={11} fill="var(--c-label)" fontWeight={600}>
-                {data[last][s.key]}%
-              </text>
+            {segments(s.key).map((d, i) => <path key={i} d={d} fill="none" stroke={s.color} strokeWidth={2} strokeDasharray={s.dash} strokeLinejoin="round" strokeLinecap="round" />)}
+            {data.map((d, i) => d[s.key] === null ? null : <circle key={i} cx={x(i)} cy={y(d[s.key] as number)} r={hover === i ? 5 : 4} fill={s.color} stroke="var(--c-surface)" strokeWidth={2} />)}
+            {lastIdx(s.key) >= 0 && (
+              <text x={x(lastIdx(s.key)) + 9} y={y(data[lastIdx(s.key)][s.key] as number) + 4} fontSize={11} fill="var(--c-label)" fontWeight={600}>{Math.round(data[lastIdx(s.key)][s.key] as number)}%</text>
             )}
           </g>
         ))}
         {data.map((_, i) => (
-          <rect
-            key={i}
-            x={x(i) - iw / Math.max(1, data.length - 1) / 2}
-            y={T}
-            width={iw / Math.max(1, data.length - 1)}
-            height={ih}
-            fill="transparent"
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-          />
+          <rect key={i} x={x(i) - iw / Math.max(1, data.length - 1) / 2} y={T} width={iw / Math.max(1, data.length - 1)} height={ih} fill="transparent" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />
         ))}
       </svg>
       {hover !== null && data[hover] && (
-        <div
-          className="pointer-events-none absolute top-6 rounded-lg border border-line bg-field px-3 py-2 text-xs shadow-sm"
-          style={{ left: `${Math.min(70, (x(hover) / W) * 100)}%` }}
-        >
-          <div className="font-semibold mb-1">{data[hover].label}</div>
-          <div>Completed: <b>{data[hover].completedPct}%</b></div>
-          <div>On time: <b>{data[hover].onTimePct ?? "—"}{data[hover].onTimePct !== null ? "%" : ""}</b></div>
-          <div className="text-ink-3">{data[hover].total} tasks</div>
+        <div className="pointer-events-none absolute top-6 rounded-lg border border-line bg-field px-3 py-2 text-xs shadow-sm" style={{ left: `${Math.min(68, (x(hover) / W) * 100)}%` }}>
+          <div className="font-semibold mb-1">{data[hover].label} · {data[hover].planned} planned</div>
+          <div>Client delivery: <b>{data[hover].client ?? "—"}{data[hover].client !== null ? "%" : ""}</b></div>
+          <div>Internal delivery: <b>{data[hover].internal ?? "—"}{data[hover].internal !== null ? "%" : ""}</b></div>
+          <div>On time: <b>{data[hover].onTime ?? "—"}{data[hover].onTime !== null ? "%" : ""}</b></div>
         </div>
       )}
     </div>
@@ -130,15 +124,15 @@ export function StatusMix({ rows }: { rows: { name: string; buckets: Record<Stat
   );
 }
 
-/** Pending reasons, one hue, sorted. */
-export function ReasonBars({ rows }: { rows: { label: string; count: number }[] }) {
+/** Slip reasons, one hue, sorted. Each bar can link to its tasks. */
+export function ReasonBars({ rows }: { rows: { label: string; count: number; href?: string }[] }) {
   const max = Math.max(1, ...rows.map((r) => r.count));
   const total = rows.reduce((a, r) => a + r.count, 0);
-  if (!rows.length) return <div className="text-sm text-ink-3 py-6 text-center">No reasons recorded for this period yet.</div>;
+  if (!rows.length) return <div className="text-sm text-ink-3 py-6 text-center">No slip reasons recorded yet. They are asked for when a planned task goes overdue or moves out of the month.</div>;
   return (
     <div className="space-y-2.5">
       {rows.map((r) => (
-        <div key={r.label} className="text-xs" title={`${r.label}: ${r.count} tasks (${Math.round((r.count / total) * 100)}%)`}>
+        <a key={r.label} href={r.href} className="block text-xs hover:opacity-80" title={`${r.label}: ${r.count} tasks (${Math.round((r.count / total) * 100)}%)`}>
           <div className="flex justify-between mb-1">
             <span className="text-ink-2">{r.label}</span>
             <span className="num text-ink-2">{r.count} · {Math.round((r.count / total) * 100)}%</span>
@@ -146,7 +140,7 @@ export function ReasonBars({ rows }: { rows: { label: string; count: number }[] 
           <div className="h-2.5 rounded bg-line/60">
             <div className="h-full rounded" style={{ width: `${(r.count / max) * 100}%`, background: "var(--c-series-1)" }} />
           </div>
-        </div>
+        </a>
       ))}
     </div>
   );

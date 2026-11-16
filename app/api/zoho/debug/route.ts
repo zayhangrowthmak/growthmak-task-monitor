@@ -37,6 +37,14 @@ export async function GET() {
       const tasks = await zget<any>(`/api/v3/portal/${portal}/projects/${list[0].id}/tasks`, { page: 1, per_page: 5 });
       out.tasks = shape(tasks, "tasks");
       const t = listFrom(tasks, "tasks")[0];
+      // v2: show the date fields of one closed task, to confirm where Zoho keeps the completion time
+      const { prisma } = await import("@/lib/db");
+      const closed = await prisma.task.findFirst({ where: { isClosed: true, raw: { not: undefined } }, orderBy: { updatedAtZoho: "desc" } });
+      const raw = (closed?.raw ?? null) as Record<string, unknown> | null;
+      if (raw) {
+        const dateish = Object.fromEntries(Object.entries(raw).filter(([k, v]) => /time|date|_on|completed|closed/i.test(k) && (typeof v !== "object" || v === null)));
+        out.closedTaskDateFields = { id: closed!.id, key: closed!.key, status: raw.status, fields: dateish, storedCompletedAt: closed!.completedAt, observedDoneAt: closed!.observedDoneAt };
+      }
       if (t) out.taskSample = { id: t.id, prefix: t.prefix, key: t.key, name: t.name, status: t.status, start_date: t.start_date, end_date: t.end_date, completion_percentage: t.completion_percentage, owners: t.owners_and_work?.owners ?? t.owners ?? t.details?.owners, tags: t.tags };
     }
   } catch (e: any) {
