@@ -1,4 +1,5 @@
 // v2 Cliq alerts and scheduled posts.
+import { doers } from "../people";
 //  • Real-time alerts only for PLANNED deliverables of the current month
 //  • One message per state change (Tight → At Risk → Overdue …); never the same state twice
 //  • Follow-ups (Done, back on track) go into the task's thread
@@ -23,7 +24,11 @@ const TITLE: Partial<Record<TaskState, string>> = {
   BLOCKED_INTERNAL: "[BLOCKED - INTERNAL]",
 };
 
-const who = (r: Row) => r.task.assignees.map((a) => mention(a.user)).join(" ") || "Unassigned";
+const who = (r: Row) => {
+  const d = doers(r.task);
+  const owners = r.task.assignees.filter((a) => a.role === "OWNER" && !d.includes(a));
+  return (d.map((a) => mention(a.user)).join(" ") || "Unassigned") + (owners.length ? ` (owner: ${owners.map((a) => a.user.name).join(", ")})` : "");
+};
 const confText = (c: number | null) => (c === 1 ? "1 - At Risk" : c === 2 ? "2 - Watch" : c === 3 ? "3 - On Track" : "not set");
 
 function dueText(r: Row, now: Date, workingDays: number[]): string {
@@ -82,7 +87,7 @@ export async function runAlerts(now = new Date(), opts: { silentBaseline?: boole
     await prisma.cliqMessage.update({ where: { id: prev.id }, data: { lastState: state } });
     if (silent || !s.alertsEnabled) continue;
     if (state === "DONE" || state === "DONE_LATE") {
-      const by = r.task.assignees.map((a) => mention(a.user)).join(" ") || "the team";
+      const by = doers(r.task).map((a) => mention(a.user)).join(" ") || "the team";
       const when = r.doneAt ? fmtDate(r.doneAt) : fmtDate(now);
       const tag = r.onTime === null ? "" : r.onTime ? " (on time)" : ` (${r.daysLate} day${r.daysLate === 1 ? "" : "s"} late)`;
       await enqueue({ kind: "reply", taskId: r.task.id, month, state, text: `[DONE] Completed ${when} by ${by}${tag}` });
@@ -118,7 +123,7 @@ export async function postOldTaskReviews(now = new Date()) {
   const plan = d.plan;
   const decideBy = plan ? fmtDate(plan.locksAt) : "the 3rd working day";
   const byUser = new Map<string, { user: User; items: typeof d.old }>();
-  for (const o of d.old) for (const a of o.task.assignees) {
+  for (const o of d.old) for (const a of doers(o.task)) {
     const e = byUser.get(a.userId) ?? { user: a.user, items: [] };
     e.items.push(o);
     byUser.set(a.userId, e);
@@ -187,7 +192,7 @@ export async function postCheckins(now = new Date()) {
   const by = new Map<string, { user: User; rows: Row[] }>();
   for (const r of d.rows) {
     if (r.done || !r.task.dueDate || r.task.dueDate >= weekEnd) continue;
-    for (const a of r.task.assignees) {
+    for (const a of doers(r.task)) {
       const e = by.get(a.userId) ?? { user: a.user, rows: [] };
       e.rows.push(r);
       by.set(a.userId, e);

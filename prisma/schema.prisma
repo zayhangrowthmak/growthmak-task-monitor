@@ -196,9 +196,17 @@ model Task {
   @@index([completedAt])
 }
 
+/// How someone is on a task: the Zoho Owner, the person in the custom "Assigned To" field, or both
+enum AssigneeRole {
+  OWNER
+  ASSIGNED
+  BOTH
+}
+
 model TaskAssignee {
   taskId  String
   userId  String
+  role    AssigneeRole @default(OWNER)
   task    Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

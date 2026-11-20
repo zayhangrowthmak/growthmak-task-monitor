@@ -18,6 +18,7 @@ const TABS = [
   { key: "unplanned", label: "Unplanned" },
   { key: "old", label: "Old (pending decision)" },
   { key: "backlog", label: "Backlog" },
+  { key: "assigned", label: "Assigned to others" },
 ] as const;
 
 export async function PersonDashboard({ person, viewer, sp, basePath }: { person: User; viewer: User; sp: Record<string, string>; basePath: string }) {
@@ -38,7 +39,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
     return `${basePath}?${q.toString()}`;
   };
   const hrefFor = (id: string) => qs({ task: id });
-  const all: Row[] = [...d.rows, ...d.unplannedOpen, ...d.unplannedDone];
+  const all: Row[] = [...d.rows, ...d.unplannedOpen, ...d.unplannedDone, ...d.delegated];
   const openRow = sp.task ? all.find((r) => r.task.id === sp.task) : undefined;
   const dueChanges = openRow ? await prisma.dueDateChange.findMany({ where: { taskId: openRow.task.id }, orderBy: { changedAt: "desc" }, take: 10 }) : [];
   const needReason = (own || admin) && d.live ? d.rows.filter((r) => !r.done && (r.slip || r.waitingClient || r.blockedInternal) && !r.task.slipReason) : [];
@@ -46,7 +47,8 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
   const dl = (a: number | null | undefined, b: number | null | undefined) => (a === null || a === undefined || b === null || b === undefined ? null : a - b);
   const sugDelivery = suggestScore(m.delivery.value);
   const sugOnTime = suggestScore(m.onTime.value);
-  const tabRows = tab === "plan" ? d.rows : tab === "unplanned" ? [...d.unplannedOpen, ...d.unplannedDone] : [];
+  // Tasks this person owns in Zoho but someone else is assigned to live in their own tab and never count here
+  const tabRows = tab === "plan" ? d.rows : tab === "unplanned" ? [...d.unplannedOpen, ...d.unplannedDone] : tab === "assigned" ? d.delegated : [];
 
   return (
     <div>
@@ -139,7 +141,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
       <div className="mt-8 mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-field p-0.5 text-sm" role="tablist">
           {TABS.map((t) => {
-            const n = t.key === "plan" ? d.rows.length : t.key === "unplanned" ? d.unplannedOpen.length + d.unplannedDone.length : t.key === "old" ? d.old.length : d.backlog.length;
+            const n = t.key === "plan" ? d.rows.length : t.key === "unplanned" ? d.unplannedOpen.length + d.unplannedDone.length : t.key === "old" ? d.old.length : t.key === "assigned" ? d.delegated.length : d.backlog.length;
             return (
               <Link key={t.key} href={qs({ tab: t.key, task: undefined })} role="tab" aria-selected={tab === t.key} className={`rounded-md px-3 py-1 ${tab === t.key ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>
                 {t.label} <span className="text-ink-3 num">{n}</span>
@@ -147,7 +149,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
             );
           })}
         </div>
-        {(tab === "plan" || tab === "unplanned") && (
+        {(tab === "plan" || tab === "unplanned" || tab === "assigned") && (
           <div className="flex rounded-lg border border-line bg-field p-0.5 text-sm">
             <Link href={qs({ view: "kanban" })} className={`rounded-md px-3 py-1 ${view === "kanban" ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>Kanban</Link>
             <Link href={qs({ view: "list" })} className={`rounded-md px-3 py-1 ${view === "list" ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>List</Link>
@@ -155,9 +157,14 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
         )}
       </div>
 
-      {(tab === "plan" || tab === "unplanned") &&
+      {tab === "assigned" && (
+        <p className="mb-3 text-sm text-ink-2 max-w-3xl">
+          Tasks {own ? "you own" : `${person.name} owns`} in Zoho but that are assigned to someone else. They count for the person doing them, not here.
+        </p>
+      )}
+      {(tab === "plan" || tab === "unplanned" || tab === "assigned") &&
         (tabRows.length === 0 ? (
-          <Empty>{tab === "plan" ? `Nothing planned for ${label}.` : "No unplanned work this month."}</Empty>
+          <Empty>{tab === "plan" ? `Nothing planned for ${label}.` : tab === "assigned" ? "No tasks assigned to others this month." : "No unplanned work this month."}</Empty>
         ) : view === "kanban" ? (
           <Kanban rows={tabRows} hrefFor={hrefFor} />
         ) : (

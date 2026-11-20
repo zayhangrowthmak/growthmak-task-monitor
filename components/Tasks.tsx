@@ -4,6 +4,7 @@ import { BUCKETS, BUCKET_COLOR, REASONS, SLIP_REASONS, reasonLabel, slipLabel, b
 import { fmtDate, fmtDateTime } from "@/lib/time";
 import { StatePill, ConfPill } from "./ui";
 import { addComment, setConfidence, setSlipReason } from "@/app/actions";
+import { peopleLabel } from "@/lib/people";
 
 const sourceLabel: Record<string, string> = { DUE_DATE: "Planned", RECURRING: "Recurring", KEPT: "Kept from earlier", PROMOTED: "Promoted", UNPLANNED: "Unplanned", VIRTUAL: "Due this month" };
 
@@ -21,7 +22,12 @@ function DueLine({ r }: { r: Row }) {
 export function TaskCard({ r, href }: { r: Row; href: string }) {
   const t = r.task;
   return (
-    <Link href={href} scroll={false} className="block card p-3 hover:border-brand transition">
+    <Link href={href} scroll={false} className={`block card p-3 hover:border-brand transition ${r.delegatedTo ? "border-dashed opacity-75" : ""}`}>
+      {r.delegatedTo && (
+        <div className="mb-2 -mx-3 -mt-3 rounded-t-[inherit] border-b border-dashed border-line bg-plane px-3 py-1 text-[11px] font-medium text-ink-2" title="You own this task in Zoho; it's assigned to someone else and doesn't count in your numbers">
+          Assigned to <span className="text-ink">{r.delegatedTo}</span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <span className="text-[11px] font-mono text-ink-3">{t.key ?? "—"}</span>
         <StatePill state={r.state} />
@@ -101,9 +107,10 @@ export function TaskList({ rows, hrefFor, showAssignee }: { rows: Row[]; hrefFor
                 <td className="max-w-[280px]">
                   <Link href={hrefFor(t.id)} scroll={false} className="font-medium hover:text-brand">{t.name}</Link>
                   {r.source !== "DUE_DATE" && r.source !== "VIRTUAL" && <div className="text-[11px] text-ink-3">{sourceLabel[r.source]}</div>}
+                  {r.delegatedTo && <div className="text-[11px] font-medium text-ink-2">Assigned to {r.delegatedTo}</div>}
                 </td>
                 <td className="whitespace-nowrap">{r.client}</td>
-                {showAssignee && <td className="whitespace-nowrap">{t.assignees.map((a) => a.user.name).join(", ") || "—"}</td>}
+                {showAssignee && <td className="whitespace-nowrap">{peopleLabel(t)}</td>}
                 <td><StatePill state={r.state} /></td>
                 <td className="num">{t.userConfidence ?? "—"}</td>
                 <td className="whitespace-nowrap">
@@ -175,7 +182,9 @@ export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Ro
       <div className="flex flex-wrap gap-2"><StatePill state={r.state} /><ConfPill value={t.userConfidence} /></div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <dt className="text-ink-2">Client</dt><dd>{r.client}</dd>
-        <dt className="text-ink-2">Owner</dt><dd>{t.assignees.map((a) => a.user.name).join(", ") || "—"}</dd>
+        <dt className="text-ink-2">Assigned to</dt><dd>{t.assignees.filter((a) => a.role !== "OWNER").map((a) => a.user.name).join(", ") || "—"}</dd>
+        <dt className="text-ink-2">Owner (Zoho)</dt><dd>{t.assignees.filter((a) => a.role !== "ASSIGNED").map((a) => a.user.name).join(", ") || "—"}</dd>
+        {r.delegatedTo && <><dt className="text-ink-2">Note</dt><dd className="text-warnText">Assigned to someone else — not counted in the owner&apos;s numbers</dd></>}
         <dt className="text-ink-2">Status (Zoho)</dt><dd>{t.zohoStatus} <span className="text-ink-3">· {bucketLabel(t.bucket)}</span></dd>
         <dt className="text-ink-2">In plan as</dt><dd>{sourceLabel[r.source]}</dd>
         <dt className="text-ink-2">Planned due</dt><dd className="num">{fmtDate(r.plannedDue)}</dd>

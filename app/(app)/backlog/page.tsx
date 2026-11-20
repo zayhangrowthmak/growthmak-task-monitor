@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { peopleLabel } from "@/lib/people";
 import { prisma } from "@/lib/db";
 import { monthData } from "@/lib/metrics";
 import { clientOf } from "@/lib/clients";
@@ -45,7 +46,7 @@ export default async function Backlog({ searchParams }: { searchParams: Promise<
                 <tr key={t.id}>
                   <td className="max-w-[320px]"><span className="font-mono text-xs text-ink-3">{t.key}</span> {t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="hover:text-brand">{t.name}</a> : t.name}</td>
                   <td>{client}</td>
-                  <td>{t.assignees.map((a) => a.user.name).join(", ") || "—"}</td>
+                  <td>{peopleLabel(t)}</td>
                   <td>{t.zohoStatus}{t.bucket !== "BACKLOG" && <span className="text-[11px] text-ink-3"> · Zoho update waiting for approval</span>}</td>
                   <td className="num">{fmtDate(t.updatedAtZoho)}</td>
                 </tr>

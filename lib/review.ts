@@ -1,4 +1,5 @@
 // Monthly Old-Task Review: each assignee decides Keep / Backlog / Close for old open tasks.
+import { doers } from "./people";
 // The decision counts in the dashboard straight away; Zoho is only changed when a manager
 // approves the matching ZohoChange on the Approvals page.
 import type { ReviewDecision, User } from "@prisma/client";
@@ -38,7 +39,7 @@ export async function decide(
   const keeps = input.decision === "KEEP" ? await consecutiveKeeps(task.id, input.month) : 0;
   const needsApproval = input.decision === "KEEP" && keeps >= s.maxKeepMonths;
   const autoApproved = needsApproval && user.role === "ADMIN";
-  const assigneeId = task.assignees.find((a) => a.userId === user.id)?.userId ?? task.assignees[0]?.userId ?? null;
+  const assigneeId = task.assignees.find((a) => a.userId === user.id)?.userId ?? doers(task)[0]?.userId ?? null;
 
   await prisma.oldTaskReview.upsert({
     where: { taskId_month: { taskId: task.id, month: input.month } },

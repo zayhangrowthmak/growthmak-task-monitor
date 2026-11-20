@@ -24,7 +24,8 @@ export type NormTask = {
   updatedAt?: Date;
   createdBy?: NormPerson;
   modifiedBy?: string;
-  owners: NormPerson[];
+  owners: NormPerson[]; // Zoho Owner field
+  assignedTo: NormPerson[]; // custom "Assigned To" field
   tags: string[];
   clientFromTag?: string;
   url?: string;
@@ -146,6 +147,40 @@ function customField(raw: any, labels: string[]): string | undefined {
   return undefined;
 }
 
+/** People in a value from a user-type field: an object, an array of them, or a name / email string. */
+function peopleIn(v: any): NormPerson[] {
+  if (v === null || v === undefined || v === "") return [];
+  if (Array.isArray(v)) return v.flatMap(peopleIn);
+  if (typeof v === "string") {
+    return v.split(/[,;]/).map((x) => x.trim()).filter(Boolean)
+      .map((x) => person(x.includes("@") ? { email: x, name: x } : { name: x })).filter(Boolean) as NormPerson[];
+  }
+  if (typeof v === "object") {
+    if ("value" in v && !("name" in v) && !("email" in v)) return peopleIn(v.value);
+    if (Array.isArray(v.values)) return peopleIn(v.values);
+    if (Array.isArray(v.users)) return peopleIn(v.users);
+    const p = person(v);
+    return p ? [p] : [];
+  }
+  return [];
+}
+
+/** The custom "Assigned To" user field (V3 top-level key, or a custom-field array entry). */
+export function assignedPeople(t: any): NormPerson[] {
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const wanted = new Set(config.zoho.assigneeFieldLabels.map(norm));
+  const hit = (k: string) => wanted.has(norm(k)) || wanted.has(norm(k.replace(/^(cf|udf)_?/i, "")));
+  for (const [k, v] of Object.entries(t ?? {})) if (hit(k)) { const ps = peopleIn(v); if (ps.length) return ps; }
+  const pools = [t?.custom_fields, t?.customfields, t?.custom_field_values, t?.layout_fields].filter(Array.isArray);
+  for (const pool of pools) {
+    for (const f of pool as any[]) {
+      const label = String(first(f.label_name, f.label, f.display_name, f.field_name, f.column_name, f.api_name) ?? "");
+      if (hit(label)) { const ps = peopleIn(first(f.value, f.field_value, f.values, f.users, f.selected_users)); if (ps.length) return ps; }
+    }
+  }
+  return [];
+}
+
 export function normalizeProject(p: any): NormProject {
   const statusName = String(first(p.status?.name, typeof p.status === "string" ? p.status : undefined, p.project_status) ?? "");
   const archived = Boolean(p.is_archived ?? p.archived) || /archiv|cancel|closed|completed/i.test(statusName);
@@ -189,7 +224,10 @@ export function normalizeTask(t: any, projectId: string, portalName: string): No
     t.assignees,
     t.assignee ? [t.assignee] : undefined
   ) as any[] | undefined;
-  const owners = (ownerPool ?? []).map(person).filter(Boolean) as NormPerson[];
+  const zohoOwners = (ownerPool ?? []).map(person).filter(Boolean) as NormPerson[];
+  // A task belongs to everyone on it: the Owner(s) and the people in the custom "Assigned To" field
+  const owners = zohoOwners;
+  const assignedTo = assignedPeople(t);
 
   const tags = tagNames(t.tags);
   const clientTag = tags.find((x) => /^client\s*[:\-]/i.test(x));
@@ -230,6 +268,7 @@ export function normalizeTask(t: any, projectId: string, portalName: string): No
     createdBy: person(first(t.created_by, t.created_person ? { name: t.created_person } : undefined)),
     modifiedBy: first(t.last_modified_by?.name, t.modified_by?.name, t.updated_by?.name, t.last_updated_by?.name)?.toString(),
     owners,
+    assignedTo,
     tags,
     clientFromTag: clientTag ? clientTag.replace(/^client\s*[:\-]\s*/i, "").trim() : undefined,
     url:

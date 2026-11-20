@@ -9,6 +9,7 @@ import { workingDaysUntil, weeksOfMonth } from "./workdays";
 import { getPlan, parkedTaskIds, type PlanWithItems } from "./plan";
 import type { TaskState } from "./status";
 import { slipLabel } from "./status";
+import { delegatedTo, doers, isDoer } from "./people";
 
 export const taskInclude = {
   project: true,
@@ -58,6 +59,7 @@ export type Row = {
   daysLate: number;
   state: TaskState;
   removed?: { reason: RemoveReason | null; note: string | null; at: Date };
+  delegatedTo?: string; // set on a person's view when they own the task but someone else is assigned to it
 };
 
 export type Pct = { value: number | null; n: number; d: number; small: boolean };
@@ -183,6 +185,7 @@ export type MonthData = {
   unplannedDone: Row[];
   unplannedOpen: Row[];
   old: OldTask[]; // current month only: old open tasks and their review decision
+  delegated: Row[]; // one person's view: tasks they own but someone else is assigned to (not in their numbers)
   backlog: FullTask[];
   closed: FullTask[];
   metrics: Metrics;
@@ -221,7 +224,10 @@ export async function monthData(month: string, opts: { userId?: string; asOf?: D
   const live = month === cur && !opts.asOf;
   const asOf = opts.asOf ?? (now < end ? now : new Date(end.getTime() - 1));
   const allTasks = opts.tasks ?? (await loadTasks());
-  const mine = (t: FullTask) => !opts.userId || t.assignees.some((a) => a.userId === opts.userId);
+  // For one person: count the tasks they do. Tasks they own but delegated are listed separately.
+  const mine = (t: FullTask) => !opts.userId || isDoer(t, opts.userId);
+  const delegatedOf = (t: FullTask) => (opts.userId ? delegatedTo(t, opts.userId) : null);
+  const delegated: Row[] = [];
   const byId = new Map(allTasks.map((t) => [t.id, t]));
   const plan = month <= cur ? await getPlan(month) : null;
   const parked = await parkedTaskIds();
@@ -235,7 +241,11 @@ export async function monthData(month: string, opts: { userId?: string; asOf?: D
       const t = byId.get(it.taskId);
       if (!t) continue;
       inPlan.add(t.id);
-      if (!mine(t)) continue;
+      if (!mine(t)) {
+        const to = delegatedOf(t);
+        if (to && !it.removedAt) delegated.push({ ...scoreRow(t, { month, plannedDue: it.plannedDue, source: it.source, asOf, settings, live }), delegatedTo: to });
+        continue;
+      }
       const r = scoreRow(t, { month, plannedDue: it.plannedDue, source: it.source, asOf, settings, live });
       if (it.removedAt) removed.push({ ...r, removed: { reason: it.removedReason, note: it.removedNote, at: it.removedAt } });
       else rows.push(r);
@@ -246,6 +256,7 @@ export async function monthData(month: string, opts: { userId?: string; asOf?: D
       if (!inRange(t.dueDate, start, end)) continue;
       inPlan.add(t.id);
       if (mine(t)) rows.push(scoreRow(t, { month, plannedDue: t.dueDate, source: "VIRTUAL", asOf, settings, live }));
+      else { const to = delegatedOf(t); if (to) delegated.push({ ...scoreRow(t, { month, plannedDue: t.dueDate, source: "VIRTUAL", asOf, settings, live }), delegatedTo: to }); }
     }
   }
 
@@ -253,7 +264,12 @@ export async function monthData(month: string, opts: { userId?: string; asOf?: D
   const unplannedDone: Row[] = [];
   const unplannedOpen: Row[] = [];
   for (const t of allTasks) {
-    if (inPlan.has(t.id) || !mine(t) || t.bucket === "BACKLOG" || t.bucket === "CLOSED") continue;
+    if (inPlan.has(t.id) || t.bucket === "BACKLOG" || t.bucket === "CLOSED") continue;
+    if (!mine(t)) {
+      const to = delegatedOf(t);
+      if (to && live && !parked.has(t.id) && inRange(t.dueDate, start, end)) delegated.push({ ...scoreRow(t, { month, plannedDue: t.dueDate, source: "UNPLANNED", asOf, settings, live }), delegatedTo: to });
+      continue;
+    }
     const d = doneAtOf(t);
     if (t.bucket === "COMPLETED" && inRange(d, start, end) && d! <= asOf) unplannedDone.push(scoreRow(t, { month, plannedDue: t.dueDate, source: "UNPLANNED", asOf, settings, live }));
     else if (live && t.bucket !== "COMPLETED" && !parked.has(t.id) && inRange(t.dueDate, start, end))
@@ -295,7 +311,7 @@ export async function monthData(month: string, opts: { userId?: string; asOf?: D
     oldPending: old.filter((o) => !o.decision).length,
     avgReviewDays: await avgReviewDays(rows.map((r) => r.task.id), month, asOf),
   });
-  return { month, live, asOf, plan, virtual, rows, removed, unplannedDone, unplannedOpen, old, backlog, closed, metrics, tasks: allTasks };
+  return { month, live, asOf, plan, virtual, rows, removed, unplannedDone, unplannedOpen, old, backlog, closed, metrics, delegated, tasks: allTasks };
 }
 
 /** The same month last month, as of the same point (for a running month) or in full. */
@@ -314,11 +330,11 @@ export type PersonRow = { userId: string; name: string; email: string; metrics: 
 export async function groupByPerson(d: MonthData): Promise<PersonRow[]> {
   const users = await prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" } });
   const oldBy = new Map<string, number>();
-  for (const o of d.old) if (!o.decision) for (const a of o.task.assignees) oldBy.set(a.userId, (oldBy.get(a.userId) ?? 0) + 1);
+  for (const o of d.old) if (!o.decision) for (const a of doers(o.task)) oldBy.set(a.userId, (oldBy.get(a.userId) ?? 0) + 1);
   const out: PersonRow[] = [];
   for (const u of users) {
-    const rows = d.rows.filter((r) => r.task.assignees.some((a) => a.userId === u.id));
-    const unplanned = d.unplannedDone.filter((r) => r.task.assignees.some((a) => a.userId === u.id)).length;
+    const rows = d.rows.filter((r) => isDoer(r.task, u.id));
+    const unplanned = d.unplannedDone.filter((r) => isDoer(r.task, u.id)).length;
     // Admins with no tasks at all are managers, not delivery people — skip them
     if (!rows.length && !unplanned && !oldBy.get(u.id) && u.role === "ADMIN") continue;
     const metrics = computeMetrics(rows, { unplannedDone: unplanned, oldPending: oldBy.get(u.id) ?? 0, avgReviewDays: null });

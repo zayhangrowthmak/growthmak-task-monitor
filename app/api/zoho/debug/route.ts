@@ -18,9 +18,23 @@ const shape = (json: any, key: string) => {
   };
 };
 
-export async function GET() {
+export async function GET(req: Request) {
   const u = await currentUser();
   if (u?.role !== "ADMIN") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // ?key=GM-T418 → the stored Zoho fields of one task, and who the dashboard thinks it belongs to
+  const key = new URL(req.url).searchParams.get("key");
+  if (key) {
+    const { prisma } = await import("@/lib/db");
+    const { assignedPeople } = await import("@/lib/zoho/normalize");
+    const t = await prisma.task.findFirst({ where: { OR: [{ key }, { id: key }] }, include: { assignees: { include: { user: true } } } });
+    if (!t) return NextResponse.json({ error: `no task ${key}` }, { status: 404 });
+    const raw = (t.raw ?? {}) as Record<string, unknown>;
+    const compact = Object.fromEntries(Object.entries(raw).filter(([k]) => !/description/i.test(k)));
+    return NextResponse.json(
+      { key: t.key, name: t.name, syncedAt: t.syncedAt, dashboardAssignees: t.assignees.map((a) => a.user.name), assignedToField: assignedPeople(raw), raw: compact },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  }
   const out: Record<string, unknown> = { portalNameSetting: config.zoho.portalName };
   try {
     const portals = await listPortals();

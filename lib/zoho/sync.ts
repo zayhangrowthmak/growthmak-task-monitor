@@ -11,9 +11,11 @@ import { acquireLock, releaseLock } from "../lock";
 async function upsertPerson(p: NormPerson): Promise<string | null> {
   const email = p.email?.toLowerCase();
   if (!email) {
-    if (!p.zohoUserId) return null;
-    const existing = await prisma.user.findUnique({ where: { zohoUserId: p.zohoUserId } });
-    return existing?.id ?? null;
+    // User-type custom fields may carry only an id and a name: match an existing person, never create one
+    const byId = p.zohoUserId ? await prisma.user.findUnique({ where: { zohoUserId: p.zohoUserId } }) : null;
+    if (byId) return byId.id;
+    const byName = p.name ? await prisma.user.findMany({ where: { name: { equals: p.name, mode: "insensitive" } }, take: 2 }) : [];
+    return byName.length === 1 ? byName[0].id : null;
   }
   const role = config.adminEmails.includes(email) ? "ADMIN" : undefined;
   const user = await prisma.user.upsert({
@@ -75,11 +77,17 @@ export async function saveTask(n: NormTask, raw: any) {
     await prisma.statusChange.create({ data: { taskId: n.id, from: null, to: bucket, toName: n.statusName, at: n.updatedAt ?? new Date() } });
   }
 
-  const userIds = (await Promise.all(n.owners.map(upsertPerson))).filter(Boolean) as string[];
+  // Everyone on the task shows it: Owner(s) and "Assigned To" people, each with their role
+  const ownerIds = (await Promise.all(n.owners.map(upsertPerson))).filter(Boolean) as string[];
+  const assignedIds = (await Promise.all(n.assignedTo.map(upsertPerson))).filter(Boolean) as string[];
+  const roles = new Map<string, "OWNER" | "ASSIGNED" | "BOTH">();
+  for (const id of ownerIds) roles.set(id, "OWNER");
+  for (const id of assignedIds) roles.set(id, roles.get(id) === "OWNER" ? "BOTH" : "ASSIGNED");
+  const userIds = [...roles.keys()];
   await prisma.$transaction([
     prisma.taskAssignee.deleteMany({ where: { taskId: n.id, userId: { notIn: userIds } } }),
-    ...userIds.map((userId) =>
-      prisma.taskAssignee.upsert({ where: { taskId_userId: { taskId: n.id, userId } }, create: { taskId: n.id, userId }, update: {} })
+    ...[...roles].map(([userId, role]) =>
+      prisma.taskAssignee.upsert({ where: { taskId_userId: { taskId: n.id, userId } }, create: { taskId: n.id, userId, role }, update: { role } })
     ),
   ]);
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { peopleLabel } from "@/lib/people";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { ALL, monthData, type Row } from "@/lib/metrics";
@@ -69,7 +70,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
                   {rows.map((r) => (
                     <tr key={r.task.id}>
                       <td className="max-w-[300px]"><Link href={`/tasks/${r.task.id}`} className="hover:text-brand">{r.task.name}</Link>{prevIds.has(r.task.id) && <span className="ml-1 text-[10px] text-ink-3">carried</span>}</td>
-                      <td className="whitespace-nowrap">{r.task.assignees.map((a) => a.user.name).join(", ") || "—"}</td>
+                      <td className="whitespace-nowrap">{peopleLabel(r.task)}</td>
                       <td className="whitespace-nowrap text-xs">{SRC[r.source]}</td>
                       <td className="num whitespace-nowrap">{fmtDate(r.plannedDue)}{r.dueChanged && <div className="text-[11px] text-warnText">now {fmtDate(r.task.dueDate)}</div>}</td>
                       <td><StatePill state={r.state} /></td>
@@ -103,7 +104,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
           <div className="card divide-y divide-line">
             {d.unplannedOpen.map((r) => (
               <div key={r.task.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
-                <span className="flex-1">{r.task.key} {r.task.name} <span className="text-ink-3">· {r.client} · {r.task.assignees.map((a) => a.user.name).join(", ")} · due {fmtDate(r.task.dueDate)}</span></span>
+                <span className="flex-1">{r.task.key} {r.task.name} <span className="text-ink-3">· {r.client} · {peopleLabel(r.task)} · due {fmtDate(r.task.dueDate)}</span></span>
                 <form action={promoteAction}><input type="hidden" name="month" value={month} /><input type="hidden" name="taskId" value={r.task.id} /><button className="btn">Promote to plan</button></form>
               </div>
             ))}

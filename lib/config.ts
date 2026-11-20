@@ -34,6 +34,8 @@ export const config = {
     webhookSecret: process.env.ZOHO_WEBHOOK_SECRET ?? "",
     // Project custom-field labels to read the client name/type from (case-insensitive)
     clientFieldLabels: list(process.env.ZOHO_CLIENT_FIELD_LABELS || "Client,Client Name"),
+    // Custom user field(s) naming who works on the task. Those people count alongside the Owner.
+    assigneeFieldLabels: list(process.env.ZOHO_ASSIGNEE_FIELD_LABELS || "Assigned To,Assigned_To,AssignedTo,Assignee Name"),
     clientTypeFieldLabels: list(process.env.ZOHO_CLIENT_TYPE_FIELD_LABELS || "Client Type,Type,Category"),
     // Only these Zoho project statuses are synced (case-insensitive). Empty = all non-archived.
     activeProjectStatuses: list(process.env.ZOHO_ACTIVE_PROJECT_STATUSES),

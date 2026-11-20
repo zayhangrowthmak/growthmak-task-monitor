@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { peopleLabel } from "@/lib/people";
 import { requireAdmin } from "@/lib/auth";
 import { ALL, monthData, previousFor, groupByPerson, groupByClient, buildInsights, trend, workload, type PersonRow, type Row } from "@/lib/metrics";
 import { resolvePeriod } from "@/lib/period";
@@ -128,7 +129,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
                       <Link href={`/tasks/${r.task.id}`} className="min-w-0 flex-1 truncate hover:text-brand">
                         {r.task.name} <span className="text-ink-3">· {r.client}</span>
                       </Link>
-                      <span className="text-xs text-ink-2 whitespace-nowrap">{r.task.assignees.map((a) => a.user.name).join(", ")}</span>
+                      <span className="text-xs text-ink-2 whitespace-nowrap">{peopleLabel(r.task)}</span>
                     </li>
                   ))}
                 </ul>

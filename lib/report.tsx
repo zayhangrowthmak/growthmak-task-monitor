@@ -1,4 +1,5 @@
 // Monthly Deliverables Report (spec v2 §6) and the client one-pager (§5.3).
+import { doers, isDoer, peopleLabel } from "./people";
 import React from "react";
 import path from "node:path";
 import { prisma, getState } from "./db";
@@ -79,7 +80,7 @@ export function statusWord(r: Row): string {
   return "In progress";
 }
 const statusColor = (r: Row) => (r.done ? (r.onTime === false ? C.ink2 : C.good) : r.slip || r.waitingClient || r.blockedInternal ? C.crit : C.ink);
-const owners = (r: Row) => r.task.assignees.map((a) => a.user.name).join(", ") || "—";
+const owners = (r: Row) => peopleLabel(r.task);
 const remark = (r: Row) => {
   if (r.removed) return `${r.removed.reason ? removeLabel(r.removed.reason) : "Removed"}${r.removed.note ? `: ${r.removed.note}` : ""}`;
   const parts = [r.task.slipReason ? `${slipLabel(r.task.slipReason)}${r.task.slipNote ? `: ${r.task.slipNote}` : ""}` : "", r.task.comments[0]?.text ?? ""].filter(Boolean);
@@ -201,7 +202,7 @@ function ReportDoc({ g }: { g: Awaited<ReturnType<typeof gather>> }) {
           const overall = crit.length ? Math.round((crit.reduce((a, b) => a + b, 0) / crit.length) * 10) / 10 : null;
           const mine = p.rows.filter((r) => r.slip || r.waitingClient);
           const dec = decisions.filter((x) => x.userId === p.userId);
-          const und = undecided.filter((t) => t.assignees.some((a) => a.userId === p.userId)).length;
+          const und = undecided.filter((t) => isDoer(t, p.userId)).length;
           return (
             <R.View key={p.userId} style={s.card} wrap={false}>
               <R.View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -255,7 +256,7 @@ function ReportDoc({ g }: { g: Awaited<ReturnType<typeof gather>> }) {
         <R.Text style={s.h2}>6. Old tasks & backlog hygiene</R.Text>
         {people.map((p) => {
           const dec = decisions.filter((x) => x.userId === p.userId);
-          const und = undecided.filter((t) => t.assignees.some((a) => a.userId === p.userId));
+          const und = undecided.filter((t) => isDoer(t, p.userId));
           if (!dec.length && !und.length) return null;
           return (
             <R.View key={p.userId} style={{ marginBottom: 4 }} wrap={false}>
@@ -272,7 +273,7 @@ function ReportDoc({ g }: { g: Awaited<ReturnType<typeof gather>> }) {
           Draft plan: {next.rows.length} deliverables due (incl. recurring). Carried in from this month&apos;s slips: {slipCarry.length} still open.
         </R.Text>
         {[...nextByClient.entries()].map(([client, rows]) => (
-          <R.Text key={client} style={{ marginBottom: 1.5 }}>• {client}: {rows.length} — {[...new Set(rows.flatMap((r) => r.task.assignees.map((a) => a.user.name)))].join(", ") || "unassigned"}</R.Text>
+          <R.Text key={client} style={{ marginBottom: 1.5 }}>• {client}: {rows.length} — {[...new Set(rows.flatMap((r) => doers(r.task).map((a) => a.user.name)))].join(", ") || "unassigned"}</R.Text>
         ))}
 
         {/* Appendix */}

@@ -173,6 +173,26 @@ async function main() {
     assert.ok([a, b].some((r) => /already running/.test(r)), `got: ${a} | ${b}`);
   });
 
+  console.log("\nAssigned To field");
+  await check("the Owner and the 'Assigned To' people are both read", async () => {
+    const { normalizeTask } = await import("../lib/zoho/normalize");
+    const owner = { owners_and_work: { owners: [{ name: "Shahul", email: "shahul@x.com", zpuid: "1" }] } };
+    const shapes = [
+      { assigned_to: { name: "Zayhan Ahmed", email: "zayhan@x.com", zpuid: "9" } },
+      { UDF_USER1: "x", custom_fields: [{ label_name: "Assigned To", value: [{ name: "Zayhan Ahmed", id: "9" }] }] },
+      { cf_assigned_to: "Zayhan Ahmed" },
+      { "Assigned To": { value: { name: "Zayhan Ahmed", email: "zayhan@x.com" } } },
+    ];
+    for (const extra of shapes) {
+      const n = normalizeTask({ id: "1", name: "t", status: { name: "Open" }, ...owner, ...extra }, "11", "p");
+      assert.deepEqual(n.owners.map((o) => o.name), ["Shahul"], JSON.stringify(extra));
+      assert.deepEqual(n.assignedTo.map((o) => o.name), ["Zayhan Ahmed"], JSON.stringify(extra));
+    }
+    const plain = normalizeTask({ id: "1", name: "t", status: { name: "Open" }, ...owner }, "11", "p");
+    assert.deepEqual(plain.owners.map((o) => o.name), ["Shahul"]);
+    assert.equal(plain.assignedTo.length, 0, "no Assigned To");
+  });
+
   console.log("\nWebhook");
   await check("webhook refuses a wrong secret", async () => {
     const res = await webhook.POST(new NextRequest("https://x/api/webhooks/zoho?secret=nope", { method: "POST", body: "{}" }));
@@ -335,6 +355,24 @@ async function main() {
   await check("by-client view groups the plan", async () => {
     const clients = await groupByClient(await monthData(cur));
     assert.ok(clients.find((c) => c.name === "AdinNYC"));
+  });
+
+  await check("Owner sees a task assigned to someone else in its own section, not in their numbers", async () => {
+    const { peopleLabel } = await import("../lib/people");
+    mock.setTaskFields("103", { end_date: lastDay, assigned_to: { name: "Vahid", email: "vahid@growthmaksolutions.com" } });
+    await syncOneTask("11", "103");
+    const roles = await prisma.taskAssignee.findMany({ where: { taskId: "103" }, include: { user: true } });
+    assert.deepEqual(roles.map((r) => `${r.user.name}:${r.role}`).sort(), ["Sandeep:OWNER", "Vahid:ASSIGNED"]);
+    const vahid = (await prisma.user.findUnique({ where: { email: "vahid@growthmaksolutions.com" } }))!;
+    const sd = await monthData(cur, { userId: sandeep.id });
+    const vd = await monthData(cur, { userId: vahid.id });
+    const has = (d: typeof sd) => [...d.rows, ...d.unplannedOpen, ...d.unplannedDone].some((r) => r.task.id === "103");
+    assert.ok(has(vd), "shows for the assignee, counted");
+    assert.ok(!has(sd), "not in the owner's plan or numbers");
+    const del = sd.delegated.find((r) => r.task.id === "103");
+    assert.ok(del, "listed in the owner's 'Assigned to others' section");
+    assert.equal(del!.delegatedTo, "Vahid");
+    assert.equal(peopleLabel(del!.task), "Vahid (owner: Sandeep)");
   });
 
   console.log("\nMonth end, report");

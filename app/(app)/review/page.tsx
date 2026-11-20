@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { peopleLabel } from "@/lib/people";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { monthData } from "@/lib/metrics";
@@ -85,7 +86,7 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
                         <td><input type="checkbox" name="taskId" value={o.task.id} form="bulk" aria-label={`Select ${o.task.name}`} /></td>
                         <td className="max-w-[280px]"><span className="font-mono text-xs text-ink-3">{o.task.key}</span> <a href={o.task.url ?? "#"} target="_blank" rel="noreferrer" className="hover:text-brand">{o.task.name}</a></td>
                         <td className="whitespace-nowrap">{o.client}</td>
-                        {!targetId && <td className="whitespace-nowrap">{o.task.assignees.map((a) => a.user.name).join(", ")}</td>}
+                        {!targetId && <td className="whitespace-nowrap">{peopleLabel(o.task)}</td>}
                         <td className="num whitespace-nowrap">{fmtDate(o.task.dueDate)}</td>
                         <td className="num whitespace-nowrap">{o.daysOverdue !== null ? `${o.daysOverdue} days` : "no due date"}</td>
                         <td className="num whitespace-nowrap">{fmtDate(o.task.updatedAtZoho)}</td>

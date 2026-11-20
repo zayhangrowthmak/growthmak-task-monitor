@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { peopleLabel } from "@/lib/people";
 import { requireAdmin } from "@/lib/auth";
 import { ALL, monthData, groupByClient, type FullTask } from "@/lib/metrics";
 import { resolvePeriod } from "@/lib/period";
@@ -74,7 +75,7 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
                 {[...c.rows].sort((a, b) => Number(a.done) - Number(b.done)).map((r) => (
                   <tr key={r.task.id}>
                     <td className="max-w-[260px]"><Link href={`/tasks/${r.task.id}`} className="hover:text-brand">{r.task.name}</Link></td>
-                    <td className="whitespace-nowrap">{r.task.assignees.map((a) => a.user.name).join(", ") || "—"}</td>
+                    <td className="whitespace-nowrap">{peopleLabel(r.task)}</td>
                     <td className="whitespace-nowrap"><StatePill state={r.state} title={statusWord(r)} /></td>
                     <td className="num">{r.task.userConfidence ?? "—"}</td>
                     <td className="font-mono text-xs">{r.task.key}</td>
