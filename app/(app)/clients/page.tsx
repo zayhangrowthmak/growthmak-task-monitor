@@ -52,13 +52,20 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
             <div><div className="label">Slipped</div><div className="mt-1 text-xl font-semibold num">{c.metrics.slipped}</div></div>
             <div>
               <div className="label">Last 6 months</div>
-              <div className="mt-1 flex items-end gap-1 h-10" aria-label="Delivery rate by month">
-                {trends.get(c.name)!.map((t, i) => (
-                  <div key={i} className="flex flex-col items-center gap-0.5" title={`${t.label}: ${t.value === null ? "no plan" : `${t.value}% of ${t.d}`}`}>
-                    <div className="rise w-5 rounded-t bg-brand" style={{ height: `${t.value === null ? 2 : Math.max(3, (t.value / 100) * 32)}px`, opacity: t.value === null ? 0.25 : 1, ["--d" as string]: `${i * 70}ms` }} />
-                    <span className="text-[9px] text-ink-3">{t.label}</span>
-                  </div>
-                ))}
+              <div className="mt-2" role="img" aria-label={`Delivery rate by month: ${trends.get(c.name)!.map((t) => `${t.label} ${t.value === null ? "no plan" : `${t.value}%`}`).join(", ")}`}>
+                <div className="flex h-9 items-end gap-1.5 border-b border-line">
+                  {trends.get(c.name)!.map((t, i) => (
+                    <div key={i} className="flex h-full w-6 items-end" title={`${t.label}: ${t.value === null ? "no plan" : `${t.value}% of ${t.d}`}`}>
+                      <div
+                        className="rise w-full rounded-t-[3px] bg-brand"
+                        style={{ height: !t.value ? "2px" : `${Math.max(6, t.value)}%`, opacity: t.value === null ? 0.25 : 1, ["--d" as string]: `${i * 70}ms` }}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1 flex gap-1.5" aria-hidden>
+                  {trends.get(c.name)!.map((t, i) => <span key={i} className="w-6 text-center text-[10px] text-ink-3">{t.label}</span>)}
+                </div>
               </div>
             </div>
           </div>
