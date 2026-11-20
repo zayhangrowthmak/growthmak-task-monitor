@@ -195,7 +195,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
               <thead>
                 <tr>
                   <Th k="name">Person</Th><Th k="planned">Planned</Th><Th k="completed">Completed</Th><Th k="delivery">Delivery</Th><Th k="ontime">On time</Th>
-                  <Th k="slipped">Slipped</Th><Th k="waiting">Waiting on client</Th><Th k="unplanned">Unplanned done</Th><Th k="old">Old pending</Th><th>Rating</th>
+                  <Th k="slipped">Slipped</Th><Th k="waiting"><span className="leading-tight">Waiting on<br />client</span></Th><Th k="unplanned"><span className="leading-tight">Unplanned<br />done</span></Th><Th k="old"><span className="leading-tight">Old<br />pending</span></Th><th>Rating</th>
                 </tr>
               </thead>
               <tbody>
@@ -207,7 +207,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
                     </td>
                     <td className="num">{p.metrics.planned}</td>
                     <td className="num">{p.metrics.completed}</td>
-                    <td><div className="flex items-center gap-2 min-w-36"><Bar value={p.metrics.delivery.value ?? 0} color={p.metrics.delivery.small ? "rgb(var(--ink-3))" : TONE[paceTone(p.metrics.completed, p.metrics.planned, d.live ? elapsed.done / elapsed.total : 1).tone].fill} delay={idx * 60} /><PctText p={p.metrics.delivery} className="text-xs whitespace-nowrap" /></div></td>
+                    <td><div className="flex items-center gap-2 min-w-32"><Bar value={p.metrics.delivery.value ?? 0} color={p.metrics.delivery.small ? "rgb(var(--ink-3))" : TONE[paceTone(p.metrics.completed, p.metrics.planned, d.live ? elapsed.done / elapsed.total : 1).tone].fill} delay={idx * 60} /><PctText p={p.metrics.delivery} className="text-xs whitespace-nowrap" /></div></td>
                     <td className="text-xs whitespace-nowrap"><PctText p={p.metrics.onTime} /></td>
                     <td className={`num ${p.personSlipped ? "text-crit font-semibold" : ""}`}>{p.personSlipped}</td>
                     <td className="num">{p.metrics.waitingClient}</td>

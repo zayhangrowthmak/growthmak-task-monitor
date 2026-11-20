@@ -22,23 +22,26 @@
   --c-series-1: #2a78d6; --c-series-2: #eb6834; --c-series-3: #1baf7a;
 }
 .dark {
+  /* Dark theme: deep navy. Page < cards < inputs step up in lightness, all on one blue hue. */
   color-scheme: dark;
-  --surface: 26 26 25;      /* #1a1a19 */
-  --plane: 13 13 13;        /* #0d0d0d */
-  --field: 34 34 32;
-  --ink: 240 239 236;
-  --ink-2: 195 194 183;
-  --ink-3: 137 135 129;
-  --line: 44 44 42;
-  --brand: 57 135 229;      /* #3987e5 */
-  --brand-dark: 134 182 239;
-  --brand-soft: 24 47 79;
-  --good-text: 12 163 12;
+  --surface: 16 29 53;      /* #101d35 cards */
+  --plane: 10 20 38;        /* #0a1426 page */
+  --field: 22 38 68;        /* #162644 inputs, buttons */
+  --ink: 234 240 250;       /* 14.7:1 on cards */
+  --ink-2: 179 193 218;     /* 9.3:1 */
+  --ink-3: 132 150 184;     /* 5.6:1 */
+  --line: 35 54 87;         /* #233657 */
+  --brand: 77 148 240;      /* #4d94f0 — 5.5:1 for links */
+  --brand-dark: 156 194 247;
+  --brand-soft: 27 53 96;
+  --good-text: 31 191 76;
   --warn-text: 250 178 25;
-  --blocked-text: 236 131 90;
-  --c-grid: #2c2c2a; --c-axis: #383835; --c-muted: #898781; --c-label: #c3c2b7; --c-surface: #1a1a19;
-  --c-series-1: #3987e5; --c-series-2: #d95926; --c-series-3: #199e70;
+  --blocked-text: 240 140 100;
+  --c-grid: #1e3050; --c-axis: #2c4166; --c-muted: #8496b8; --c-label: #b3c1da; --c-surface: #101d35;
+  --c-series-1: #4d94f0; --c-series-2: #e5703f; --c-series-3: #22b07f;
 }
+/* Red as text needs a lighter step on navy (status fills keep the fixed red) */
+.dark .text-crit { color: #f27a7a; }
 html { scrollbar-color: rgb(var(--line)) transparent; }
 body { background: rgb(var(--plane)); color: rgb(var(--ink)); -webkit-font-smoothing: antialiased; }
 ::selection { background: rgb(var(--brand) / 0.22); color: rgb(var(--ink)); }

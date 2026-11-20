@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { Icon } from "@/components/Icon";
 import { peopleLabel } from "@/lib/people";
 import { requireUser } from "@/lib/auth";
@@ -106,33 +107,53 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
                 ))}
               </ul>
 
-              <div className="mt-3 card overflow-x-auto max-md:hidden">
-                <table className="tbl w-full">
+              {/* Wider screens: task facts on one line, its decision on the line below. Never scrolls sideways. */}
+              <div className="mt-3 card max-md:hidden">
+                <table className="tbl w-full table-fixed">
+                  <colgroup>
+                    <col className="w-10" />
+                    <col />
+                    <col className="w-[16%]" />
+                    {!targetId && <col className="w-[16%]" />}
+                    <col className="w-[11%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[11%]" />
+                  </colgroup>
                   <thead>
-                    <tr><th className="w-8"><span className="sr-only">Select</span></th><th>Task</th><th>Client</th>{!targetId && <th>Owner</th>}<th>Original due</th><th>Overdue</th><th>Last update</th><th>Decide</th></tr>
+                    <tr><th><span className="sr-only">Select</span></th><th>Task</th><th>Client</th>{!targetId && <th>Owner</th>}<th>Original due</th><th>Overdue</th><th>Last update</th></tr>
                   </thead>
                   <tbody>
                     {pending.map((o) => (
-                      <tr key={o.task.id} className="align-top">
-                        <td><input type="checkbox" name="taskId" value={o.task.id} form="bulk" aria-label={`Select ${o.task.name}`} /></td>
-                        <td className="min-w-[200px] max-w-[300px]"><div className="num text-[11px] text-ink-3">{o.task.key}</div><a href={o.task.url ?? "#"} target="_blank" rel="noreferrer" className="hover:text-brand">{o.task.name}</a></td>
-                        <td className="whitespace-nowrap">{o.client}</td>
-                        {!targetId && <td className="whitespace-nowrap">{peopleLabel(o.task)}</td>}
-                        <td className="num whitespace-nowrap">{fmtDate(o.task.dueDate)}</td>
-                        <td className="num whitespace-nowrap">{o.daysOverdue !== null ? `${o.daysOverdue} days` : "no due date"}</td>
-                        <td className="num whitespace-nowrap">{fmtDate(o.task.updatedAtZoho)}</td>
-                        <td className="min-w-[330px]">
-                          <form action={decideOldTasks} className="flex flex-wrap items-center gap-1.5">
-                            <input type="hidden" name="month" value={month} />
-                            <input type="hidden" name="taskId" value={o.task.id} />
-                            <input type="date" name="newDueDate" defaultValue={defaultDue} aria-label="New due date" className="w-36" />
-                            <button name="decision" value="KEEP" className="btn">Keep</button>
-                            <button name="decision" value="BACKLOG" className="btn">Backlog</button>
-                            <button name="decision" value="CLOSE" className="btn">Close</button>
-                            <input name="note" placeholder="Note" className="w-full mt-1" />
-                          </form>
-                        </td>
-                      </tr>
+                      <Fragment key={o.task.id}>
+                        <tr className="align-top [&>td]:border-b-0 [&>td]:pb-1">
+                          <td><input type="checkbox" name="taskId" value={o.task.id} form="bulk" aria-label={`Select ${o.task.name}`} className="mt-0.5" /></td>
+                          <td><div className="num text-[11px] text-ink-3">{o.task.key}</div><a href={o.task.url ?? "#"} target="_blank" rel="noreferrer" className="font-medium hover:text-brand">{o.task.name}</a></td>
+                          <td className="break-words">{o.client}</td>
+                          {!targetId && <td className="break-words">{peopleLabel(o.task)}</td>}
+                          <td className="num">{fmtDate(o.task.dueDate)}</td>
+                          <td className="num">{o.daysOverdue !== null ? <span className="text-crit">{o.daysOverdue} days</span> : "no due date"}</td>
+                          <td className="num">{fmtDate(o.task.updatedAtZoho)}</td>
+                        </tr>
+                        <tr>
+                          <td />
+                          <td colSpan={targetId ? 5 : 6} className="pt-1 pb-3">
+                            <form action={decideOldTasks} className="flex flex-wrap items-center gap-2">
+                              <input type="hidden" name="month" value={month} />
+                              <input type="hidden" name="taskId" value={o.task.id} />
+                              <label className="flex items-center gap-2 text-xs text-ink-2">
+                                New due if kept
+                                <input type="date" name="newDueDate" defaultValue={defaultDue} className="w-40" />
+                              </label>
+                              <input name="note" placeholder="Note (optional)" aria-label={`Note for ${o.task.name}`} className="min-w-[12rem] flex-1" />
+                              <div className="flex gap-2">
+                                <button name="decision" value="KEEP" className="btn">Keep this month</button>
+                                <button name="decision" value="BACKLOG" className="btn">Move to Backlog</button>
+                                <button name="decision" value="CLOSE" className="btn">Close</button>
+                              </div>
+                            </form>
+                          </td>
+                        </tr>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
