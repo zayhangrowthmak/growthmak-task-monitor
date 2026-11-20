@@ -19,7 +19,6 @@ export default async function Backlog({ searchParams }: { searchParams: Promise<
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="label">Backlog</div>
           <h1 className="text-2xl font-semibold tracking-tight">Parked ideas & future plans ({rows.length})</h1>
           <p className="text-sm text-ink-2 mt-1">Backlog tasks never alert and never count in monthly scores. To bring one back, give it a due date in Zoho.</p>
         </div>

@@ -19,7 +19,6 @@ export default async function Reports() {
 
   return (
     <div>
-      <div className="label">Reports</div>
       <h1 className="text-2xl font-semibold tracking-tight">Monthly Deliverables Reports</h1>
       <p className="mt-1 text-sm text-ink-2 max-w-3xl">
         Built at 00:30 IST on the 1st for the month that just ended, and posted to Cliq at {s.reportPostHour}:00 IST with the PDF attached.

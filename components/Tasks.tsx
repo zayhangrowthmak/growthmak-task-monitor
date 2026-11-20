@@ -5,6 +5,7 @@ import { fmtDate, fmtDateTime } from "@/lib/time";
 import { StatePill, ConfPill } from "./ui";
 import { addComment, setConfidence, setSlipReason } from "@/app/actions";
 import { peopleLabel } from "@/lib/people";
+import { Icon } from "./Icon";
 
 const sourceLabel: Record<string, string> = { DUE_DATE: "Planned", RECURRING: "Recurring", KEPT: "Kept from earlier", PROMOTED: "Promoted", UNPLANNED: "Unplanned", VIRTUAL: "Due this month" };
 
@@ -13,7 +14,7 @@ function DueLine({ r }: { r: Row }) {
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-2">
       <span className="num">Planned {fmtDate(r.plannedDue)}</span>
       {r.dueChanged && <span className="num text-warnText">now {fmtDate(r.task.dueDate)}</span>}
-      {r.slip === "OPEN" && <span className="font-semibold text-crit">▲ {r.daysLate}d overdue</span>}
+      {r.slip === "OPEN" && <span className="inline-flex items-center gap-1 font-semibold text-crit"><Icon name="alert" size={12} />{r.daysLate}d overdue</span>}
       {r.slip === "LATE" && <span className="font-semibold text-crit">done {r.daysLate}d late</span>}
     </div>
   );
@@ -57,7 +58,7 @@ export function TaskCard({ r, href }: { r: Row; href: string }) {
 /** Read-only Kanban mirroring the Zoho board (Backlog / Closed live in their own tabs). */
 export function Kanban({ rows, hrefFor }: { rows: Row[]; hrefFor: (id: string) => string }) {
   return (
-    <div className="grid gap-3 overflow-x-auto pb-2" style={{ gridTemplateColumns: `repeat(${BUCKETS.length}, minmax(230px, 1fr))` }}>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       {BUCKETS.map((b) => {
         const col = rows.filter((r) => (r.done ? "COMPLETED" : r.task.bucket === "COMPLETED" ? "IN_PROGRESS" : r.task.bucket) === b.key);
         return (
@@ -114,7 +115,7 @@ export function TaskList({ rows, hrefFor, showAssignee }: { rows: Row[]; hrefFor
                 <td><StatePill state={r.state} /></td>
                 <td className="num">{t.userConfidence ?? "—"}</td>
                 <td className="whitespace-nowrap">
-                  {t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="font-mono text-xs text-brand hover:underline">{t.key ?? "Open"} ↗</a> : <span className="font-mono text-xs">{t.key}</span>}
+                  {t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="num inline-flex items-center gap-1 whitespace-nowrap text-xs text-brand hover:underline">{t.key ?? "Open"}<Icon name="external" size={12} /></a> : <span className="font-mono text-xs">{t.key}</span>}
                 </td>
                 <td className="whitespace-nowrap num">
                   {fmtDate(r.plannedDue)}
@@ -177,7 +178,7 @@ export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Ro
           <div className="text-xs font-mono text-ink-3">{t.key} · {t.project.name}</div>
           <h3 className="text-lg font-semibold leading-snug mt-0.5">{t.name}</h3>
         </div>
-        {closeHref && <Link href={closeHref} scroll={false} className="btn" aria-label="Close">✕</Link>}
+        {closeHref && <Link href={closeHref} scroll={false} className="btn btn-icon" aria-label="Close"><Icon name="x" /></Link>}
       </div>
       <div className="flex flex-wrap gap-2"><StatePill state={r.state} /><ConfPill value={t.userConfidence} /></div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -191,7 +192,7 @@ export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Ro
         <dt className="text-ink-2">Current due</dt><dd className="num">{fmtDate(t.dueDate)}{r.dueChanged && <span className="text-warnText"> (changed)</span>}</dd>
         <dt className="text-ink-2">Done on</dt><dd className="num">{r.doneAt ? fmtDate(r.doneAt) : r.done ? "done (time unknown)" : `${t.completionPct}% done`}</dd>
       </dl>
-      {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="btn">Open in Zoho Projects ↗</a>}
+      {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="btn">Open in Zoho Projects<Icon name="external" size={14} /></a>}
 
       {canEdit && !r.done && (
         <div className="rounded-lg border border-line bg-plane/60 p-3 space-y-2">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Meter, ratioTone, onTimeTone } from "@/components/Viz";
 import { peopleLabel } from "@/lib/people";
 import { requireAdmin } from "@/lib/auth";
 import { ALL, monthData, groupByClient, type FullTask } from "@/lib/metrics";
@@ -33,7 +34,6 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="label">Clients</div>
           <h1 className="text-2xl font-semibold tracking-tight">By client · {label}</h1>
           <p className="text-sm text-ink-2 mt-1">Planned vs completed for the month, what&apos;s waiting on each client, and the deliverable list. Export a client-friendly PDF (no internal ratings) for client calls.</p>
         </div>
@@ -47,15 +47,15 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
             <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}`} className="btn">Export client PDF</a>
           </div>
           <div className="mt-3 grid gap-4 md:grid-cols-4 text-sm">
-            <div><div className="label">Delivered</div><div className="mt-1 text-xl font-semibold"><PctText p={c.metrics.delivery} /></div></div>
-            <div><div className="label">On time</div><div className="mt-1 text-xl font-semibold"><PctText p={c.metrics.onTime} /></div></div>
+            <div><div className="label">Delivered</div><div className="mt-1 text-xl font-semibold"><PctText p={c.metrics.delivery} /></div><div className="mt-2"><Meter value={c.metrics.delivery.value} tone={c.metrics.delivery.small ? "none" : ratioTone(c.metrics.delivery.value)} label={`Delivered ${c.metrics.delivery.value ?? 0}%`} /></div></div>
+            <div><div className="label">On time</div><div className="mt-1 text-xl font-semibold"><PctText p={c.metrics.onTime} /></div><div className="mt-2"><Meter value={c.metrics.onTime.value} tone={c.metrics.onTime.small ? "none" : onTimeTone(c.metrics.onTime.value)} delay={120} label={`On time ${c.metrics.onTime.value ?? 0}%`} /></div></div>
             <div><div className="label">Slipped</div><div className="mt-1 text-xl font-semibold num">{c.metrics.slipped}</div></div>
             <div>
               <div className="label">Last 6 months</div>
               <div className="mt-1 flex items-end gap-1 h-10" aria-label="Delivery rate by month">
                 {trends.get(c.name)!.map((t, i) => (
                   <div key={i} className="flex flex-col items-center gap-0.5" title={`${t.label}: ${t.value === null ? "no plan" : `${t.value}% of ${t.d}`}`}>
-                    <div className="w-5 rounded-t bg-brand" style={{ height: `${t.value === null ? 2 : Math.max(3, (t.value / 100) * 32)}px`, opacity: t.value === null ? 0.25 : 1 }} />
+                    <div className="rise w-5 rounded-t bg-brand" style={{ height: `${t.value === null ? 2 : Math.max(3, (t.value / 100) * 32)}px`, opacity: t.value === null ? 0.25 : 1, ["--d" as string]: `${i * 70}ms` }} />
                     <span className="text-[9px] text-ink-3">{t.label}</span>
                   </div>
                 ))}

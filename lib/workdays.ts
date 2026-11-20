@@ -82,3 +82,15 @@ export function workingDaysFromNowEnd(now: Date, n: number, month: string, worki
   }
   return endOfIstDay(d);
 }
+
+/** How far through the month's working days we are: done = working days fully or partly elapsed (today counts). */
+export function workdayProgress(month: string, now: Date, workingDays: number[]): { done: number; total: number } {
+  const { start, end } = monthRange(month);
+  let total = 0, done = 0;
+  for (let d = start; d < end; d = new Date(d.getTime() + DAY)) {
+    if (!isWorkingDay(d, workingDays)) continue;
+    total++;
+    if (d <= now) done++;
+  }
+  return { done: Math.min(done, total), total: Math.max(total, 1) };
+}

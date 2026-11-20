@@ -9,9 +9,9 @@
   --field: 255 255 255;     /* inputs, buttons */
   --ink: 11 11 11;
   --ink-2: 82 81 78;
-  --ink-3: 137 135 129;
+  --ink-3: 107 105 100;     /* #6b6964 — 5:1 on page and cards */
   --line: 225 224 217;
-  --brand: 42 120 214;      /* #2a78d6 */
+  --brand: 36 108 198;      /* #246cc6 — 4.9:1 for links */
   --brand-dark: 28 92 171;
   --brand-soft: 232 241 252;
   --good-text: 0 99 0;
@@ -19,7 +19,7 @@
   --blocked-text: 180 71 29;
   /* chart tokens (used as var(--c-…) in SVG) */
   --c-grid: #e1e0d9; --c-axis: #c3c2b7; --c-muted: #898781; --c-label: #52514e; --c-surface: #fcfcfb;
-  --c-series-1: #2a78d6; --c-series-2: #eb6834;
+  --c-series-1: #2a78d6; --c-series-2: #eb6834; --c-series-3: #1baf7a;
 }
 .dark {
   color-scheme: dark;
@@ -37,15 +37,66 @@
   --warn-text: 250 178 25;
   --blocked-text: 236 131 90;
   --c-grid: #2c2c2a; --c-axis: #383835; --c-muted: #898781; --c-label: #c3c2b7; --c-surface: #1a1a19;
-  --c-series-1: #3987e5; --c-series-2: #d95926;
+  --c-series-1: #3987e5; --c-series-2: #d95926; --c-series-3: #199e70;
 }
-body { background: rgb(var(--plane)); color: rgb(var(--ink)); }
+html { scrollbar-color: rgb(var(--line)) transparent; }
+body { background: rgb(var(--plane)); color: rgb(var(--ink)); -webkit-font-smoothing: antialiased; }
+::selection { background: rgb(var(--brand) / 0.22); color: rgb(var(--ink)); }
+a { text-underline-offset: 3px; }
+/* One visible focus ring for every control, keyboard only */
+:where(a, button, [role="tab"], summary, input[type="checkbox"], input[type="radio"]):focus-visible {
+  outline: 2px solid rgb(var(--brand)); outline-offset: 2px; border-radius: 6px;
+}
+/* Inside sideways scrollers the ring is drawn inside the item, so the scroller can't clip it */
+.scroll-x :focus-visible { outline-offset: -2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 0 0 0 3px rgb(var(--brand) / 0.25); }
+input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--brand)); width: 1rem; height: 1rem; padding: 0; }
+/* Grid cells may shrink below their content, so wide tables scroll inside their card, never the page */
+.grid > * { min-width: 0; }
+/* Wide content (tables, boards) scrolls inside its own box, never the page */
+.scroll-x { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+/* Edge fade on sideways scrollers, so a cut-off item reads as "more this way" */
+@media (max-width: 1535px) { .fade-x { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); } }
+@media (max-width: 767px) { .fade-x-sm { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); } }
+.no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
 .card { @apply bg-surface rounded-xl border border-line; }
-.btn { @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium border border-line bg-field hover:bg-plane transition; }
+.btn { @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium border border-line bg-field hover:bg-plane active:translate-y-px transition min-h-[34px] max-sm:min-h-[40px] disabled:opacity-50 disabled:pointer-events-none; }
+.btn-icon { @apply px-0 w-[34px] max-sm:w-[40px]; }
 .btn-primary { @apply bg-brand text-white border-brand hover:bg-brand-dark; }
 .label { @apply text-[11px] font-semibold uppercase tracking-wide text-ink-2; }
 .num { font-variant-numeric: tabular-nums; }
 .tbl th { @apply text-left text-xs font-semibold text-ink-2 py-2 px-3 border-b border-line whitespace-nowrap; }
 .tbl td { @apply py-2 px-3 border-b border-line text-sm; }
 .tbl tr:last-child td { @apply border-b-0; }
-input, select, textarea { @apply rounded-lg border border-line bg-field text-ink px-2.5 py-1.5 text-sm outline-none focus:border-brand; }
+input, select, textarea { @apply rounded-lg border border-line bg-field text-ink px-2.5 py-1.5 text-sm outline-none focus:border-brand min-h-[34px] max-sm:min-h-[40px] max-w-full; }
+textarea { min-height: auto; }
+::placeholder { color: rgb(var(--ink-3)); opacity: 1; }
+
+/* ---------- Motion: data arrives, then rests ---------- */
+@property --n { syntax: "<integer>"; initial-value: 0; inherits: false; }
+.countup { --n: var(--to); counter-reset: n var(--n); animation: countup 1100ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.countup::after { content: counter(n) var(--suffix, ""); }
+@keyframes countup { from { --n: 0; } }
+/* Fills draw from the baseline (clip-path keeps the rounded end) */
+.grow { animation: grow 900ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes grow { from { clip-path: inset(0 100% 0 0 round 999px); } to { clip-path: inset(0 0 0 0 round 999px); } }
+/* Columns rise from their baseline */
+.rise { transform-origin: bottom; animation: rise 800ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes rise { from { transform: scaleY(0); } }
+/* Markers settle in after the fill they compare against */
+.drop { animation: drop 450ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes drop { from { opacity: 0; translate: 0 -4px; } }
+/* Lines draw left to right */
+.reveal-x { animation: reveal-x 1200ms cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: var(--d, 150ms); }
+@keyframes reveal-x { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+/* Live data: a soft ring, a few beats, then still */
+.live-dot { position: relative; display: inline-block; width: 7px; height: 7px; border-radius: 999px; background: #0ca30c; vertical-align: 1px; }
+.live-dot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: live 2s ease-out 6; }
+@keyframes live { from { transform: scale(1); opacity: .55; } to { transform: scale(3); opacity: 0; } }
+/* Linked cards answer the pointer: the card stays put, its surface lifts */
+.lift { transition: box-shadow 200ms, border-color 200ms; }
+.lift:hover { box-shadow: 0 6px 18px -8px rgb(0 0 0 / .18); }
+@media (prefers-reduced-motion: reduce) {
+  .countup, .grow, .rise, .drop, .reveal-x { animation: none; }
+  .live-dot::after { animation: none; }
+}

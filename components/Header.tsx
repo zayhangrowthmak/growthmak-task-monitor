@@ -2,12 +2,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Icon } from "./Icon";
 
-/** Top navigation. Runs in the browser so the active tab follows every page change. */
-export function MainNav({ items }: { items: { href: string; label: string }[] }) {
+export type NavItem = { href: string; label: string; count?: number };
+
+/** Top navigation. Runs in the browser so the active tab follows every page change.
+ *  Below 1536px it sits on its own row and scrolls sideways instead of squeezing the header. */
+export function MainNav({ items }: { items: NavItem[] }) {
   const path = usePathname();
   return (
-    <nav className="flex gap-1">
+    <nav aria-label="Main" className="scroll-x no-scrollbar fade-x -mx-1 flex min-w-0 gap-0.5 px-1">
       {items.map((n) => {
         const active = path === n.href || path.startsWith(`${n.href}/`);
         return (
@@ -15,9 +19,16 @@ export function MainNav({ items }: { items: { href: string; label: string }[] })
             key={n.href}
             href={n.href}
             aria-current={active ? "page" : undefined}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${active ? "bg-brand-soft text-brand-dark" : "text-ink-2 hover:bg-plane"}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors max-sm:min-h-[40px] ${
+              active ? "bg-brand-soft text-brand-dark" : "text-ink-2 hover:bg-plane hover:text-ink"
+            }`}
           >
             {n.label}
+            {!!n.count && (
+              <span className="num min-w-[18px] rounded-full bg-crit px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white" aria-label={`${n.count} waiting`}>
+                {n.count}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -35,16 +46,10 @@ export function ThemeToggle() {
     document.cookie = `theme=${next ? "dark" : "light"}; path=/; max-age=31536000; samesite=lax`;
     setDark(next);
   };
+  const label = dark ? "Switch to light mode" : "Switch to dark mode";
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="btn px-2.5"
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      title={dark ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      <span aria-hidden className="text-base leading-none">{dark ? "☀" : "☾"}</span>
-      <span className="hidden sm:inline">{dark === null ? "Theme" : dark ? "Light" : "Dark"}</span>
+    <button type="button" onClick={toggle} className="btn btn-icon" aria-label={label} title={label}>
+      <Icon name={dark ? "sun" : "moon"} />
     </button>
   );
 }

@@ -9,6 +9,9 @@ import { Kpi, Empty, PctText, pctBig, StatePill } from "./ui";
 import { Kanban, TaskList, TaskDetail, SlipReasonForm } from "./Tasks";
 import { saveReview } from "@/app/actions";
 import { bucketLabel } from "@/lib/status";
+import { getSettings } from "@/lib/settings";
+import { workdayProgress } from "@/lib/workdays";
+import { Meter, SplitBar, PartsLegend, PaceBand, paceTone, onTimeTone } from "./Viz";
 
 /** Data-suggested 1–5 score from a percentage. */
 export const suggestScore = (v: number | null) => (v === null ? null : v >= 90 ? 5 : v >= 75 ? 4 : v >= 60 ? 3 : v >= 40 ? 2 : 1);
@@ -27,6 +30,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
   const view = sp.view === "list" ? "list" : "kanban";
   const tab = (TABS.find((t) => t.key === sp.tab)?.key ?? "plan") as (typeof TABS)[number]["key"];
   const d = await monthData(month, { userId: person.id });
+  const elapsed = workdayProgress(month, new Date(), (await getSettings()).workingDays);
   const m = d.metrics;
   const prev = await previousFor(d, person.id);
   const admin = viewer.role === "ADMIN";
@@ -54,7 +58,6 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="label">{admin && !own ? "Individual view" : "My dashboard"}</div>
           <h1 className="text-2xl font-semibold tracking-tight">{person.name} · {label}</h1>
           <div className="text-xs text-ink-3 mt-1">
             {d.virtual ? "No stored plan for this month — planned = due in the month" : d.plan?.status === "DRAFT" ? `Planning window — plan locks ${fmtDate(d.plan.locksAt)}` : `Plan locked ${fmtDate(d.plan?.lockedAt)}`}
@@ -84,14 +87,32 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
         </div>
       )}
 
-      <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi vs={vs} label="Delivery" value={pctBig(m.delivery)} sub={`${m.completed} of ${m.planned} planned`} small={m.delivery.small} delta={dl(m.delivery.value, prev?.delivery.value)} />
-        <Kpi vs={vs} label="Client / Internal" value={`${pctBig(m.client.delivery)} / ${pctBig(m.internal.delivery)}`} sub={`${m.client.completed}/${m.client.planned} client · ${m.internal.completed}/${m.internal.planned} internal`} />
-        <Kpi vs={vs} label="On time" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)} />
-        <Kpi vs={vs} label="Slipped" value={String(d.rows.filter((r) => r.slip && !r.waitingClient).length)} sub={`${m.slipOpen} open · ${m.slipLate} late · ${m.slipMoved} moved`} goodWhenUp={false} unit="tasks" delta={dl(m.slipped, prev?.slipped)} />
-        <Kpi vs={vs} label="Waiting on client" value={String(m.waitingClient)} sub="not counted as your miss" />
-        <Kpi vs={vs} label="Unplanned done" value={String(m.unplannedDone)} sub={d.live ? `${m.atRisk} at risk now` : "not penalised"} />
-      </div>
+      {(() => {
+        const frac = d.live ? elapsed.done / elapsed.total : 1;
+        const mine = d.rows.filter((r) => r.slip && !r.waitingClient);
+        const parts = [
+          { label: "open", value: mine.filter((r) => r.slip === "OPEN").length },
+          { label: "late", value: mine.filter((r) => r.slip === "LATE").length },
+          { label: "moved", value: mine.filter((r) => r.slip === "MOVED").length },
+        ];
+        return (
+          <>
+            <PaceBand completed={m.completed} planned={m.planned} inReview={d.rows.filter((r) => !r.done && r.task.bucket === "REVIEW").length} elapsed={elapsed} live={d.live} who={own ? "you" : person.name.split(" ")[0]} />
+            <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              <Kpi vs={vs} label="Delivery" value={pctBig(m.delivery)} sub={`${m.completed} of ${m.planned} planned`} small={m.delivery.small} delta={dl(m.delivery.value, prev?.delivery.value)}
+                viz={<Meter value={m.delivery.value} tone={m.delivery.small ? "none" : paceTone(m.completed, m.planned, frac).tone} delay={100} label={`Delivery ${pctBig(m.delivery)}`} />} />
+              <Kpi vs={vs} label="Client / Internal" value={`${pctBig(m.client.delivery)} / ${pctBig(m.internal.delivery)}`} sub={`${m.client.completed}/${m.client.planned} client · ${m.internal.completed}/${m.internal.planned} internal`}
+                viz={<SplitBar delay={160} label={`${m.client.planned} client and ${m.internal.planned} internal deliverables planned`} parts={[{ label: "client", value: m.client.planned }, { label: "internal", value: m.internal.planned, color: "var(--c-series-3)" }]} />} />
+              <Kpi vs={vs} label="On time" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)}
+                viz={<Meter value={m.onTime.value} tone={m.onTime.small ? "none" : onTimeTone(m.onTime.value)} delay={220} label={`On time ${pctBig(m.onTime)}`} />} />
+              <Kpi vs={vs} label="Slipped" value={String(mine.length)} goodWhenUp={false} unit="tasks" delta={dl(m.slipped, prev?.slipped)}
+                viz={<><SplitBar delay={280} label={parts.map((p) => `${p.value} ${p.label}`).join(", ")} parts={parts} /><PartsLegend parts={parts} /></>} />
+              <Kpi vs={vs} label="Waiting on client" value={String(m.waitingClient)} sub="not counted as your miss" />
+              <Kpi vs={vs} label="Unplanned done" value={String(m.unplannedDone)} sub={d.live ? `${m.atRisk} at risk now` : "not penalised"} />
+            </div>
+          </>
+        );
+      })()}
 
       <div className="mt-4 card p-4">
         <div className="flex items-center justify-between">
@@ -102,26 +123,32 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
           <form action={saveReview} className="mt-3 grid gap-4 lg:grid-cols-[1fr_1fr]">
             <input type="hidden" name="userId" value={person.id} />
             <input type="hidden" name="month" value={month} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid content-start gap-x-3 gap-y-4 sm:grid-cols-2">
               {([
                 ["delivery", "Delivery", sugDelivery, review?.delivery],
                 ["onTime", "On-time", sugOnTime, review?.onTime],
                 ["quality", "Quality / rework", null, review?.quality],
                 ["ownership", "Ownership / communication", null, review?.ownership],
               ] as const).map(([name, labelText, sug, cur]) => (
-                <label key={name} className="block text-sm">
+                <label key={name} className="flex flex-col text-sm">
                   <span className="text-ink-2">{labelText}</span>
                   <select name={name} defaultValue={cur ?? sug ?? ""} className="mt-1 w-full font-semibold">
                     <option value="">—</option>
                     {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n} / 5</option>)}
                   </select>
-                  {sug !== null && <span className="text-[11px] text-ink-3">Suggested from data: {sug}</span>}
+                  <span className="mt-1 text-[11px] text-ink-3">{sug !== null ? `Suggested from data: ${sug}` : "Your judgement"}</span>
                 </label>
               ))}
             </div>
-            <div className="space-y-2">
-              <textarea name="managerRemarks" rows={3} defaultValue={review?.managerRemarks ?? ""} placeholder="Manager remarks" className="w-full" />
-              <textarea name="cooRemarks" rows={3} defaultValue={review?.cooRemarks ?? ""} placeholder="COO remarks" className="w-full" />
+            <div className="space-y-3">
+              <label className="block text-sm">
+                <span className="text-ink-2">Manager remarks</span>
+                <textarea name="managerRemarks" rows={3} defaultValue={review?.managerRemarks ?? ""} placeholder="What went well, what to change" className="mt-1 w-full" />
+              </label>
+              <label className="block text-sm">
+                <span className="text-ink-2">COO remarks</span>
+                <textarea name="cooRemarks" rows={3} defaultValue={review?.cooRemarks ?? ""} placeholder="Optional" className="mt-1 w-full" />
+              </label>
               <button className="btn btn-primary">{review ? "Update review" : "Save review"}</button>
             </div>
           </form>
@@ -139,16 +166,16 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
       </div>
 
       <div className="mt-8 mb-3 flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-field p-0.5 text-sm" role="tablist">
+        <div className="max-w-full rounded-lg border border-line bg-field p-0.5"><div className="scroll-x no-scrollbar fade-x-sm flex gap-1 text-sm" role="tablist" aria-label="Task groups">
           {TABS.map((t) => {
             const n = t.key === "plan" ? d.rows.length : t.key === "unplanned" ? d.unplannedOpen.length + d.unplannedDone.length : t.key === "old" ? d.old.length : t.key === "assigned" ? d.delegated.length : d.backlog.length;
             return (
-              <Link key={t.key} href={qs({ tab: t.key, task: undefined })} role="tab" aria-selected={tab === t.key} className={`rounded-md px-3 py-1 ${tab === t.key ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>
+              <Link key={t.key} href={qs({ tab: t.key, task: undefined })} role="tab" aria-selected={tab === t.key} className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1 transition-colors max-sm:py-2 ${tab === t.key ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2 hover:text-ink hover:bg-plane"}`}>
                 {t.label} <span className="text-ink-3 num">{n}</span>
               </Link>
             );
           })}
-        </div>
+        </div></div>
         {(tab === "plan" || tab === "unplanned" || tab === "assigned") && (
           <div className="flex rounded-lg border border-line bg-field p-0.5 text-sm">
             <Link href={qs({ view: "kanban" })} className={`rounded-md px-3 py-1 ${view === "kanban" ? "bg-brand-soft text-brand-dark font-medium" : "text-ink-2"}`}>Kanban</Link>

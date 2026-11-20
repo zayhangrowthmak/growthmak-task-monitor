@@ -56,8 +56,8 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
           <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize={10} fill="var(--c-muted)">{d.label}</text>
         ))}
         {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={T} y2={T + ih} stroke="var(--c-axis)" strokeDasharray="3 3" />}
-        {series.map((s) => (
-          <g key={s.key}>
+        {series.map((s, si) => (
+          <g key={s.key} className="reveal-x" style={{ ["--d" as string]: `${150 + si * 120}ms` }}>
             {segments(s.key).map((d, i) => <path key={i} d={d} fill="none" stroke={s.color} strokeWidth={2} strokeDasharray={s.dash} strokeLinejoin="round" strokeLinecap="round" />)}
             {data.map((d, i) => d[s.key] === null ? null : <circle key={i} cx={x(i)} cy={y(d[s.key] as number)} r={hover === i ? 5 : 4} fill={s.color} stroke="var(--c-surface)" strokeWidth={2} />)}
             {lastIdx(s.key) >= 0 && (
@@ -137,8 +137,8 @@ export function ReasonBars({ rows }: { rows: { label: string; count: number; hre
             <span className="text-ink-2">{r.label}</span>
             <span className="num text-ink-2">{r.count} · {Math.round((r.count / total) * 100)}%</span>
           </div>
-          <div className="h-2.5 rounded bg-line/60">
-            <div className="h-full rounded" style={{ width: `${(r.count / max) * 100}%`, background: "var(--c-series-1)" }} />
+          <div className="h-2.5 rounded" style={{ background: "color-mix(in srgb, var(--c-series-1) 14%, transparent)" }}>
+            <div className="grow h-full rounded" style={{ width: `${(r.count / max) * 100}%`, background: "var(--c-series-1)", ["--d" as string]: `${rows.indexOf(r) * 80}ms` }} />
           </div>
         </a>
       ))}

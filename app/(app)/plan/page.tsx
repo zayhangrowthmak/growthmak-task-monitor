@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { peopleLabel } from "@/lib/people";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -38,7 +39,6 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="label">Plan editor</div>
           <h1 className="text-2xl font-semibold tracking-tight">Plan · {monthLabel(month)}</h1>
           <p className="text-sm text-ink-2 mt-1">
             {d.virtual
@@ -132,7 +132,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       <div className="card divide-y divide-line">
         {recurringStatus.map(({ t, hit }) => (
           <div key={t.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
-            <span className={hit ? "text-goodText" : "text-warnText"}>{hit ? "✓" : "!"}</span>
+            <Icon name={hit ? "check" : "alert"} size={15} className={hit ? "text-goodText" : "text-warnText"} label={hit ? "Found in Zoho" : "Missing in Zoho"} />
             <span className="flex-1">{t.title} <span className="text-ink-3">· {projects.get(t.projectId)}</span>{hit ? <span className="text-ink-3"> → {hit.key} {hit.name}</span> : <span className="text-warnText"> · no Zoho task found this month</span>}</span>
             {!hit && editable && (pendingCreates.has(`${t.title}|${month}`) ? <span className="text-xs text-ink-3">creation waiting for approval</span> : (
               <form action={requestRecurringTask}><input type="hidden" name="id" value={t.id} /><input type="hidden" name="month" value={month} /><button className="btn">Request creation in Zoho</button></form>

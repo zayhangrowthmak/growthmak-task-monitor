@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { peopleLabel } from "@/lib/people";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -30,7 +31,6 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <div className="label">Monthly old-task review</div>
           <h1 className="text-2xl font-semibold tracking-tight">Old open tasks · {monthLabel(month)}</h1>
           <p className="mt-1 text-sm text-ink-2 max-w-3xl">
             These are open tasks from earlier months. They don&apos;t count in {monthLabel(month).split(" ")[0]} unless you keep them. For each one choose <b>Keep this month</b> (pick a date), <b>Move to Backlog</b>, or <b>Close (not needed)</b>.
@@ -75,7 +75,38 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
                 <button className="btn btn-primary">Apply to selected</button>
               </form>
 
-              <div className="mt-3 card overflow-x-auto">
+              {/* Phones: one card per task, decision controls in reach */}
+              <ul className="mt-3 space-y-3 md:hidden">
+                {pending.map((o) => (
+                  <li key={o.task.id} className="card p-3">
+                    <div className="flex items-start gap-3">
+                      <input type="checkbox" name="taskId" value={o.task.id} form="bulk" aria-label={`Select ${o.task.name}`} className="mt-1" />
+                      <div className="min-w-0 flex-1">
+                        <div className="num text-[11px] text-ink-3">{o.task.key}</div>
+                        <a href={o.task.url ?? "#"} target="_blank" rel="noreferrer" className="font-medium hover:text-brand">{o.task.name}</a>
+                        <div className="mt-0.5 text-xs text-ink-2">
+                          {o.client}{!targetId && <> · {peopleLabel(o.task)}</>} · due {fmtDate(o.task.dueDate)}
+                          {o.daysOverdue !== null && <span className="text-crit"> · {o.daysOverdue} days overdue</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <form action={decideOldTasks} className="mt-3 grid grid-cols-3 gap-2">
+                      <input type="hidden" name="month" value={month} />
+                      <input type="hidden" name="taskId" value={o.task.id} />
+                      <label className="col-span-3 flex items-center gap-2 text-xs text-ink-2">
+                        New due if kept
+                        <input type="date" name="newDueDate" defaultValue={defaultDue} className="flex-1" />
+                      </label>
+                      <input name="note" placeholder="Note (optional)" aria-label="Note" className="col-span-3" />
+                      <button name="decision" value="KEEP" className="btn">Keep</button>
+                      <button name="decision" value="BACKLOG" className="btn">Backlog</button>
+                      <button name="decision" value="CLOSE" className="btn">Close</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-3 card overflow-x-auto max-md:hidden">
                 <table className="tbl w-full">
                   <thead>
                     <tr><th className="w-8"><span className="sr-only">Select</span></th><th>Task</th><th>Client</th>{!targetId && <th>Owner</th>}<th>Original due</th><th>Overdue</th><th>Last update</th><th>Decide</th></tr>
@@ -84,7 +115,7 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
                     {pending.map((o) => (
                       <tr key={o.task.id} className="align-top">
                         <td><input type="checkbox" name="taskId" value={o.task.id} form="bulk" aria-label={`Select ${o.task.name}`} /></td>
-                        <td className="max-w-[280px]"><span className="font-mono text-xs text-ink-3">{o.task.key}</span> <a href={o.task.url ?? "#"} target="_blank" rel="noreferrer" className="hover:text-brand">{o.task.name}</a></td>
+                        <td className="min-w-[200px] max-w-[300px]"><div className="num text-[11px] text-ink-3">{o.task.key}</div><a href={o.task.url ?? "#"} target="_blank" rel="noreferrer" className="hover:text-brand">{o.task.name}</a></td>
                         <td className="whitespace-nowrap">{o.client}</td>
                         {!targetId && <td className="whitespace-nowrap">{peopleLabel(o.task)}</td>}
                         <td className="num whitespace-nowrap">{fmtDate(o.task.dueDate)}</td>
@@ -127,7 +158,7 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
               </div>
             </>
           )}
-          {admin && <p className="mt-4 text-sm"><Link href="/approvals" className="text-brand hover:underline">Approve the Zoho updates for these decisions →</Link></p>}
+          {admin && <p className="mt-4 text-sm"><Link href="/approvals" className="text-brand hover:underline">Approve the Zoho updates for these decisions <Icon name="arrowRight" size={14} className="inline -mt-0.5" /></Link></p>}
         </>
       )}
     </div>

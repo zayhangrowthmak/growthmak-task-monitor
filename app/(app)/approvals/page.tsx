@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
+import { Icon } from "@/components/Icon";
 import { prisma, getState } from "@/lib/db";
 import { fmtDateTime } from "@/lib/time";
 import { approveChanges, rejectChanges } from "@/app/actions";
@@ -18,7 +19,6 @@ export default async function Approvals() {
   const writeOk = !scopes || /tasks\.UPDATE/i.test(scopes);
   return (
     <div>
-      <div className="label">Approvals</div>
       <h1 className="text-2xl font-semibold tracking-tight">Zoho updates waiting for approval</h1>
       <p className="mt-1 text-sm text-ink-2 max-w-3xl">
         Review decisions and recurring deliverables don&apos;t touch Zoho until you approve them here. They already count in the dashboard.
@@ -30,8 +30,8 @@ export default async function Approvals() {
         <div className="mt-6"><Empty>Nothing waiting for approval.</Empty></div>
       ) : (
         <>
-          <form id="bulk-approve" className="mt-5 flex gap-2">
-            <button formAction={approveChanges} className="btn btn-primary">Approve selected → update Zoho</button>
+          <form id="bulk-approve" className="mt-5 flex flex-wrap gap-2">
+            <button formAction={approveChanges} className="btn btn-primary">Approve selected and update Zoho</button>
             <button formAction={rejectChanges} className="btn">Reject selected</button>
           </form>
           <div className="mt-3 card overflow-x-auto">
@@ -65,7 +65,7 @@ export default async function Approvals() {
       <div className="card divide-y divide-line">
         {history.map((c) => (
           <div key={c.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
-            <span className={`text-xs font-semibold ${c.status === "APPLIED" ? "text-goodText" : "text-ink-3"}`}>{c.status === "APPLIED" ? "✓ Applied" : "Rejected"}</span>
+            <span className={`text-xs font-semibold ${c.status === "APPLIED" ? "text-goodText" : "text-ink-3"}`}>{c.status === "APPLIED" ? <span className="inline-flex items-center gap-1"><Icon name="check" size={13} />Applied</span> : <span className="inline-flex items-center gap-1"><Icon name="x" size={13} />Rejected</span>}</span>
             <span className="flex-1">{c.summary}</span>
             <span className="text-xs text-ink-3">{c.decidedById ? name.get(c.decidedById) : ""} · {fmtDateTime(c.decidedAt)}</span>
           </div>

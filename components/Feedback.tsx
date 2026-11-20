@@ -2,6 +2,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { submitFeedback } from "@/app/actions";
+import { Icon } from "./Icon";
 
 const TYPES = [
   { key: "FEATURE", label: "Feature request", hint: "Something you'd like the dashboard to do" },
@@ -24,9 +25,9 @@ export function FeedbackButton() {
 
   return (
     <>
-      <button type="button" className="btn" onClick={() => setOpen(true)} aria-haspopup="dialog">
-        <span aria-hidden>✉</span>
-        <span className="hidden sm:inline">Feedback</span>
+      <button type="button" className="btn max-lg:btn-icon" onClick={() => setOpen(true)} aria-haspopup="dialog" aria-label="Send feedback" title="Send feedback">
+        <Icon name="mail" />
+        <span className="hidden lg:inline">Feedback</span>
       </button>
       <dialog
         ref={dialog}
@@ -35,7 +36,7 @@ export function FeedbackButton() {
       >
         {state?.ok ? (
           <div className="p-6 text-center">
-            <div className="text-3xl" aria-hidden>✓</div>
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-good/15 text-goodText"><Icon name="check" size={22} /></div>
             <h2 className="mt-2 text-lg font-semibold">Feedback sent</h2>
             <p className="mt-1 text-sm text-ink-2">{state.message}</p>
             <button className="btn btn-primary mt-5" onClick={() => location.reload()}>Done</button>
@@ -47,7 +48,7 @@ export function FeedbackButton() {
                 <h2 className="text-lg font-semibold">Send feedback</h2>
                 <p className="text-sm text-ink-2">Ideas, problems or anything that looks wrong. It goes straight to the admin.</p>
               </div>
-              <button type="button" className="btn px-2" aria-label="Close" onClick={() => setOpen(false)}>✕</button>
+              <button type="button" className="btn btn-icon" aria-label="Close" onClick={() => setOpen(false)}><Icon name="x" /></button>
             </div>
             <input type="hidden" name="page" value={path} />
             <fieldset>

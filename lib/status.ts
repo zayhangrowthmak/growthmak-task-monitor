@@ -58,7 +58,7 @@ export function blockedTypeFor(statusName: string, bucket: StatusBucket | null):
 export const CONFIDENCE_META: Record<Confidence, { label: string; color: string; text: string; icon: string; severity: number }> = {
   AT_RISK: { label: "At Risk", color: "#d03b3b", text: "#ffffff", icon: "▲", severity: 3 },
   TIGHT: { label: "Tight", color: "#fab219", text: "#0b0b0b", icon: "◆", severity: 2 },
-  ON_TRACK: { label: "On Track", color: "#0ca30c", text: "#ffffff", icon: "●", severity: 1 },
+  ON_TRACK: { label: "On Track", color: "#0ca30c", text: "#0b0b0b", icon: "●", severity: 1 },
   NO_DUE_DATE: { label: "No due date", color: "#c3c2b7", text: "#0b0b0b", icon: "○", severity: 1 },
   DONE: { label: "Done", color: "#e1e0d9", text: "#0b0b0b", icon: "✓", severity: 0 },
 };
@@ -73,15 +73,15 @@ export const USER_CONFIDENCE: Record<number, { label: string; color: string; tex
 // v2 task state shown on cards and used for Cliq alerts
 export type TaskState = "DONE" | "DONE_LATE" | "OVERDUE" | "MOVED" | "BLOCKED_CLIENT" | "BLOCKED_INTERNAL" | "AT_RISK" | "TIGHT" | "ON_TRACK" | "NO_DUE";
 export const STATE_META: Record<TaskState, { label: string; color: string; text: string; icon: string }> = {
-  DONE: { label: "Done", color: "#1baf7a", text: "#ffffff", icon: "✓" },
+  DONE: { label: "Done", color: "#1baf7a", text: "#0b0b0b", icon: "✓" },
   DONE_LATE: { label: "Done late", color: "#e1e0d9", text: "#0b0b0b", icon: "✓" },
   OVERDUE: { label: "Overdue", color: "#d03b3b", text: "#ffffff", icon: "▲" },
   MOVED: { label: "Moved out of month", color: "#ec835a", text: "#0b0b0b", icon: "→" },
-  BLOCKED_CLIENT: { label: "Waiting on client", color: "#eb6834", text: "#ffffff", icon: "⏸" },
+  BLOCKED_CLIENT: { label: "Waiting on client", color: "#eb6834", text: "#0b0b0b", icon: "⏸" },
   BLOCKED_INTERNAL: { label: "Blocked internally", color: "#b4471d", text: "#ffffff", icon: "■" },
   AT_RISK: { label: "At Risk", color: "#d03b3b", text: "#ffffff", icon: "▲" },
   TIGHT: { label: "Tight", color: "#fab219", text: "#0b0b0b", icon: "◆" },
-  ON_TRACK: { label: "On Track", color: "#0ca30c", text: "#ffffff", icon: "●" },
+  ON_TRACK: { label: "On Track", color: "#0ca30c", text: "#0b0b0b", icon: "●" },
   NO_DUE: { label: "No due date", color: "#c3c2b7", text: "#0b0b0b", icon: "○" },
 };
 

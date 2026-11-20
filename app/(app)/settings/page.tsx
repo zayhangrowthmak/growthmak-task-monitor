@@ -1,4 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
+import { Icon } from "@/components/Icon";
+import { auditText } from "@/lib/auditText";
 import { prisma, getState } from "@/lib/db";
 import { config, zohoConfigured } from "@/lib/config";
 import { zohoConnected } from "@/lib/zoho/client";
@@ -38,45 +40,50 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const projectName = new Map(projects.map((p) => [p.id, p.name]));
   const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const webhookUrl = `${config.appUrl}/api/webhooks/zoho?secret=${config.zoho.webhookSecret ? "••••••" : "<set ZOHO_WEBHOOK_SECRET>"}`;
-  const Ok = ({ ok }: { ok: boolean }) => <span className={`text-xs font-semibold ${ok ? "text-goodText" : "text-crit"}`}>{ok ? "✓ Ready" : "✕ Not set up"}</span>;
+  const Ok = ({ ok }: { ok: boolean }) => (
+    <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${ok ? "bg-good/10 text-goodText" : "bg-crit/10 text-crit"}`}>
+      <Icon name={ok ? "check" : "x"} size={12} />
+      {ok ? "Ready" : "Not set up"}
+    </span>
+  );
+  const Head = ({ title, ok }: { title: string; ok: boolean }) => (
+    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1"><h2 className="font-semibold">{title}</h2><Ok ok={ok} /></div>
+  );
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="label">Settings</div>
-        <h1 className="text-2xl font-semibold tracking-tight">Connections & mapping</h1>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       {sp.zoho === "connected" && <div className="card p-3 text-sm text-goodText">Zoho Projects connected. The first sync has started.</div>}
       {sp.mail === "connected" && <div className="card p-3 text-sm text-goodText">Zoho Mail connected. Feedback will now be emailed to {config.mail.feedbackTo}.</div>}
       {sp.mail === "no_refresh_token" && <div className="card p-3 text-sm text-crit">Zoho didn&apos;t return a refresh token for Mail. Remove the app's access in Zoho Accounts → Connected Apps, then connect again.</div>}
       {sp.zoho === "no_refresh_token" && <div className="card p-3 text-sm text-crit">Zoho didn&apos;t return a refresh token. Remove the app's access in Zoho Accounts → Connected Apps, then connect again.</div>}
 
-      <div className="grid gap-4 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="card p-4 space-y-2">
-          <div className="flex justify-between"><div className="font-semibold">Zoho Projects</div><Ok ok={connected} /></div>
+          <Head title="Zoho Projects" ok={connected} />
           <p className="text-sm text-ink-2">Portal <b>{config.zoho.portalName}</b> on {config.zoho.apiBase.replace("https://", "")}. Full sync every {config.jobs.syncIntervalMin} min, plus instant updates from the webhook.</p>
           <div className="text-xs text-ink-3">Last successful sync: {lastOk ? fmtDateTime(new Date(lastOk)) : "never"}</div>
-          <div className={`text-xs ${canWrite ? "text-goodText" : "text-warnText"}`}>{canWrite ? "✓ Can apply approved changes (edit access)" : "Read-only connection — reconnect to allow approved changes to update Zoho"}</div>
-          <div className="flex gap-2 pt-1">
+          <div className={`text-xs ${canWrite ? "text-goodText" : "text-warnText"}`}>{canWrite ? "Can apply approved changes (edit access)" : "Read-only connection — reconnect to allow approved changes to update Zoho"}</div>
+          <div className="flex flex-wrap gap-2 pt-1">
             {zohoConfigured() ? <a href="/api/auth/login?purpose=connect" className="btn">{connected ? "Reconnect" : "Connect Zoho Projects"}</a> : <span className="text-xs text-crit">Set ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET first</span>}
             {connected && <form action={syncNow}><button className="btn btn-primary">Sync now</button></form>}
           </div>
         </div>
         <div className="card p-4 space-y-2">
-          <div className="flex justify-between"><div className="font-semibold">Zoho webhook</div><Ok ok={Boolean(config.zoho.webhookSecret)} /></div>
+          <Head title="Zoho webhook" ok={Boolean(config.zoho.webhookSecret)} />
           <p className="text-sm text-ink-2">In Zoho Projects → Automation → Webhooks → Tasks, add this URL (POST) and append <code>task_id</code> and <code>project_id</code>, then attach it to a rule for task create/update.</p>
           <code className="block break-all rounded bg-plane p-2 text-xs">{webhookUrl}</code>
         </div>
         <div className="card p-4 space-y-2">
-          <div className="flex justify-between"><div className="font-semibold">Zoho Cliq alerts</div><Ok ok={cliqConfigured()} /></div>
+          <Head title="Zoho Cliq alerts" ok={cliqConfigured()} />
           <p className="text-sm text-ink-2">Posts automatically to <b>#{config.cliq.channel || "—"}</b> when a task turns Tight or At Risk.</p>
           {cliqConfigured() && <form action={testCliq}><button className="btn">Send test message</button></form>}
           <ul className="text-xs text-ink-2 space-y-1 pt-1">
-            {alerts.map((a) => <li key={a.id} className="truncate" title={a.error ?? undefined}>{a.ok ? "✓" : "✕"} {fmtDateTime(a.sentAt)} · {a.task.name}{!a.ok && a.error ? ` — ${a.error}` : ""}</li>)}
+            {alerts.map((a) => <li key={a.id} className="flex items-center gap-1.5" title={a.error ?? undefined}><Icon name={a.ok ? "check" : "x"} size={12} className={a.ok ? "text-goodText" : "text-crit"} label={a.ok ? "Sent" : "Failed"} /><span className="truncate">{fmtDateTime(a.sentAt)} · {a.task.name}{!a.ok && a.error ? ` — ${a.error}` : ""}</span></li>)}
           </ul>
         </div>
         <div className="card p-4 space-y-2">
-          <div className="flex justify-between"><div className="font-semibold">Feedback email</div><Ok ok={mailOk} /></div>
+          <Head title="Feedback email" ok={mailOk} />
           <p className="text-sm text-ink-2">Feedback is emailed to <b>{config.mail.feedbackTo}</b> through Zoho Mail{mailFrom ? <> (sent from {mailFrom})</> : null}. Connect while signed in to that mailbox.</p>
           {zohoConfigured() && <a href="/api/auth/login?purpose=mail" className="btn">{mailOk ? "Reconnect Zoho Mail" : "Connect Zoho Mail"}</a>}
         </div>
@@ -135,7 +142,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div>
           <h2 className="text-base font-semibold mb-3">People & access</h2>
           <div className="card overflow-x-auto">
@@ -145,10 +152,10 @@ export default async function Settings({ searchParams }: { searchParams: Promise
                 {users.filter((u) => u.active).map((u) => (
                   <tr key={u.id}>
                     <td className="font-medium">{u.name}</td>
-                    <td className="text-xs text-ink-2">{u.email}</td>
+                    <td className="max-w-[16rem] truncate text-xs text-ink-2" title={u.email}>{u.email}</td>
                     <td>
                       {u.id === me.id ? <span className="text-xs text-ink-3">Admin (you)</span> : (
-                        <form action={setRole} className="flex gap-2">
+                        <form action={setRole} className="flex items-center gap-2">
                           <input type="hidden" name="userId" value={u.id} />
                           <select name="role" defaultValue={u.role}><option value="MEMBER">Specialist (own tasks)</option><option value="ADMIN">Manager / admin</option></select>
                           <button className="btn">Save</button>
@@ -312,11 +319,9 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <h2 className="text-base font-semibold mb-3">Audit log</h2>
         <div className="card divide-y divide-line">
           {auditRows.map((a) => (
-            <div key={a.id} className="flex flex-wrap gap-3 p-2.5 text-xs">
-              <span className="text-ink-3 w-36">{fmtDateTime(a.at)}</span>
-              <span className="w-32 font-medium">{a.actor}</span>
-              <span className="w-40 font-mono">{a.action}</span>
-              <span className="flex-1 truncate text-ink-2" title={JSON.stringify(a.detail)}>{a.detail ? JSON.stringify(a.detail).slice(0, 160) : ""}</span>
+            <div key={a.id} className="grid gap-x-4 gap-y-0.5 p-3 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]">
+              <span className="num text-xs text-ink-3 sm:pt-0.5">{fmtDateTime(a.at)}</span>
+              <span className="min-w-0"><b className="font-medium">{a.actor}</b> <span className="text-ink-2">{auditText(a.action, a.detail as Record<string, unknown> | null)}</span></span>
             </div>
           ))}
           {!auditRows.length && <div className="p-3 text-sm text-ink-3">Nothing logged yet.</div>}

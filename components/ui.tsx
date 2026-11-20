@@ -1,3 +1,7 @@
+import type { Pct } from "@/lib/metrics";
+import { STATE_META, USER_CONFIDENCE, type TaskState } from "@/lib/status";
+import { Icon, STATE_ICON } from "./Icon";
+import { CountUp } from "./Viz";
 import Link from "next/link";
 import type { Confidence, StatusBucket } from "@prisma/client";
 import { CONFIDENCE_META, BUCKET_COLOR, bucketLabel } from "@/lib/status";
@@ -10,7 +14,7 @@ export function ConfidencePill({ level, title }: { level: Confidence; title?: st
       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
       style={{ background: m.color, color: m.text }}
     >
-      <span aria-hidden>{m.icon}</span>
+      <Icon name={({ AT_RISK: "alert", TIGHT: "diamond", ON_TRACK: "dot", DONE: "check" } as const)[level as "AT_RISK"] ?? "dot"} size={11} />
       {m.label}
     </span>
   );
@@ -44,6 +48,7 @@ export function Kpi({
   vs = "vs last month",
   small = false,
   title,
+  viz,
 }: {
   label: string;
   value: string;
@@ -54,6 +59,7 @@ export function Kpi({
   vs?: string;
   small?: boolean; // below 5 tasks: grey the value and say so
   title?: string;
+  viz?: React.ReactNode; // a meter or split bar under the figure
 }) {
   let deltaEl = <span className="text-ink-3">no comparison</span>;
   if (delta !== undefined && delta !== null) {
@@ -63,7 +69,7 @@ export function Kpi({
       const good = d > 0 === goodWhenUp;
       deltaEl = (
         <span className={good ? "text-goodText" : "text-crit"}>
-          {d > 0 ? "▲" : "▼"} {Math.abs(d)} {unit} <span className="text-ink-3">{vs}</span>
+          <Icon name={d > 0 ? "up" : "down"} size={13} className="inline -mt-0.5" /> {Math.abs(d)} {unit} <span className="text-ink-3">{vs}</span>
         </span>
       );
     }
@@ -71,18 +77,30 @@ export function Kpi({
   return (
     <div className="card p-4 min-w-0" title={title}>
       <div className="label">{label}</div>
-      <div className={`mt-1 text-3xl font-semibold tracking-tight ${small ? "text-ink-3" : ""}`}>{value}</div>
+      <div className={`mt-1 text-3xl font-semibold tracking-tight ${small ? "text-ink-3" : ""}`}>{figure(value)}</div>
       {small && <div className="text-[11px] text-ink-3">small sample</div>}
       {sub && <div className="mt-0.5 text-xs text-ink-2 num">{sub}</div>}
+      {viz && <div className="mt-3">{viz}</div>}
       <div className="mt-2 text-xs font-medium num">{deltaEl}</div>
     </div>
   );
 }
 
-export function Bar({ value, color = "rgb(var(--brand))" }: { value: number; color?: string }) {
+/** "16%", "11" or "7% / 50%": each whole number counts up; anything else prints as is. */
+function figure(value: string) {
+  const parts = value.split(/(\d+%?)/);
+  if (parts.length === 1) return value;
+  return parts.map((p, i) => {
+    const m = /^(\d+)(%?)$/.exec(p);
+    return m ? <CountUp key={i} value={Number(m[1])} suffix={m[2]} /> : <span key={i}>{p}</span>;
+  });
+}
+
+export function Bar({ value, color = "rgb(var(--brand))", delay = 0 }: { value: number; color?: string; delay?: number }) {
+  const v = Math.min(100, Math.max(0, value));
   return (
-    <div className="h-1.5 w-full rounded-full bg-line overflow-hidden" role="img" aria-label={`${value}%`}>
-      <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%`, background: color }} />
+    <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)` }} role="img" aria-label={`${Math.round(v)}%`}>
+      {v > 0 && <div className="grow h-full rounded-full" style={{ width: `${v}%`, background: color, ["--d" as string]: `${delay}ms` }} />}
     </div>
   );
 }
@@ -111,8 +129,6 @@ export function NavLink({ href, active, children }: { href: string; active?: boo
 }
 
 
-import type { Pct } from "@/lib/metrics";
-import { STATE_META, USER_CONFIDENCE, type TaskState } from "@/lib/status";
 
 /** "62% (18/29)". Greyed with a hint below 5 tasks. Never a bare percentage. */
 export function PctText({ p, className = "" }: { p: Pct; className?: string }) {
@@ -130,7 +146,7 @@ export function StatePill({ state, title }: { state: TaskState; title?: string }
   const m = STATE_META[state];
   return (
     <span title={title} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap" style={{ background: m.color, color: m.text }}>
-      <span aria-hidden>{m.icon}</span>
+      <Icon name={STATE_ICON[state]} size={11} />
       {m.label}
     </span>
   );
