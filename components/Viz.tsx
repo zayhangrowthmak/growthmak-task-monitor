@@ -148,11 +148,14 @@ export function PaceBand({
   return (
     <section aria-label="Month pace" className="card mt-5 p-4 sm:p-5">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-center gap-4">
+          <span className="chip hidden h-12 w-12 rounded-xl sm:inline-flex" aria-hidden><Icon name="target" size={24} /></span>
+          <div className="flex items-baseline gap-3">
           <CountUp value={pct} suffix="%" className="text-5xl font-semibold tracking-tight" />
           <div className="text-sm leading-tight">
             <div className="font-medium">delivered</div>
             <div className="num text-ink-2">{completed} of {planned} planned</div>
+          </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">

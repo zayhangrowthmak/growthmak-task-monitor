@@ -10,7 +10,7 @@ import { currentMonth, fmtDate, fmtDateTime } from "@/lib/time";
 import { getState, prisma } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import { MonthPicker } from "@/components/Pickers";
-import { Kpi, Bar, SectionTitle, ClientTypeBadge, Empty, PctText, pctBig, StatePill } from "@/components/ui";
+import { CardTitle, Kpi, Bar, SectionTitle, ClientTypeBadge, Empty, PctText, pctBig, StatePill } from "@/components/ui";
 import { TrendChart, ReasonBars } from "@/components/Charts";
 import { WorkloadStrip } from "@/components/Workload";
 import { slipLabel } from "@/lib/status";
@@ -111,22 +111,22 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           />
 
           <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <Kpi vs={vs} label="Client delivery" value={pctBig(m.client.delivery)} sub={`${m.client.completed} of ${m.client.planned} planned`} small={m.client.delivery.small} delta={dl(m.client.delivery.value, prev?.client.delivery.value)}
+            <Kpi vs={vs} label="Client delivery" icon="briefcase" tone="brand" value={pctBig(m.client.delivery)} sub={`${m.client.completed} of ${m.client.planned} planned`} small={m.client.delivery.small} delta={dl(m.client.delivery.value, prev?.client.delivery.value)}
               viz={<Meter value={m.client.delivery.value} tone={m.client.delivery.small ? "none" : paceTone(m.client.completed, m.client.planned, d.live ? elapsed.done / elapsed.total : 1).tone} delay={100} label={`Client delivery ${pctBig(m.client.delivery)}`} />} />
-            <Kpi vs={vs} label="Internal delivery" value={pctBig(m.internal.delivery)} sub={`${m.internal.completed} of ${m.internal.planned} planned`} small={m.internal.delivery.small} delta={dl(m.internal.delivery.value, prev?.internal.delivery.value)}
+            <Kpi vs={vs} label="Internal delivery" icon="building" tone="teal" value={pctBig(m.internal.delivery)} sub={`${m.internal.completed} of ${m.internal.planned} planned`} small={m.internal.delivery.small} delta={dl(m.internal.delivery.value, prev?.internal.delivery.value)}
               viz={<Meter value={m.internal.delivery.value} tone={m.internal.delivery.small ? "none" : paceTone(m.internal.completed, m.internal.planned, d.live ? elapsed.done / elapsed.total : 1).tone} delay={160} label={`Internal delivery ${pctBig(m.internal.delivery)}`} />} />
-            <Kpi vs={vs} label="On time" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)} title="Completed on or before the planned due date, out of completed deliverables with a known finish date"
+            <Kpi vs={vs} label="On time" icon="clock" tone="teal" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)} title="Completed on or before the planned due date, out of completed deliverables with a known finish date"
               viz={<Meter value={m.onTime.value} tone={m.onTime.small ? "none" : onTimeTone(m.onTime.value)} delay={220} label={`On time ${pctBig(m.onTime)}`} />} />
-            <Kpi vs={vs} label="Slipped" value={String(m.slipped)} sub={undefined} delta={dl(m.slipped, prev?.slipped)} goodWhenUp={false} unit="tasks"
+            <Kpi vs={vs} label="Slipped" icon="trendDown" tone="crit" value={String(m.slipped)} sub={undefined} delta={dl(m.slipped, prev?.slipped)} goodWhenUp={false} unit="tasks"
               viz={<><SplitBar delay={280} label={`${m.slipOpen} still open, ${m.slipLate} finished late, ${m.slipMoved} moved out`} parts={[{ label: "open", value: m.slipOpen }, { label: "late", value: m.slipLate }, { label: "moved", value: m.slipMoved }]} /><PartsLegend parts={[{ label: "open", value: m.slipOpen }, { label: "late", value: m.slipLate }, { label: "moved", value: m.slipMoved }]} /></>} />
-            <Kpi vs={vs} label="Waiting on client" value={String(m.waitingClient)} sub={undefined} delta={dl(m.waitingClient, prev?.waitingClient)} goodWhenUp={false} unit="tasks"
+            <Kpi vs={vs} label="Waiting on client" icon="hourglass" tone="warn" value={String(m.waitingClient)} sub={undefined} delta={dl(m.waitingClient, prev?.waitingClient)} goodWhenUp={false} unit="tasks"
               viz={<><SplitBar delay={340} label={`${m.waitingClient} waiting on client, ${m.blockedInternal} blocked internally`} parts={[{ label: "on client", value: m.waitingClient, color: "var(--c-series-2)" }, { label: "internal", value: m.blockedInternal, color: "var(--c-series-1)" }]} /><PartsLegend parts={[{ label: "on client", value: m.waitingClient, color: "var(--c-series-2)" }, { label: "blocked internally", value: m.blockedInternal, color: "var(--c-series-1)" }]} /></>} />
-            <Kpi vs={vs} label="Unplanned work" value={String(m.unplannedDone)} sub="done, not in the plan" delta={dl(m.unplannedDone, prev?.unplannedDone)} unit="tasks" />
+            <Kpi vs={vs} label="Unplanned work" icon="zap" tone="brand" value={String(m.unplannedDone)} sub="done, not in the plan" delta={dl(m.unplannedDone, prev?.unplannedDone)} unit="tasks" />
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
             <div className="card p-4">
-              <div className="label mb-2">What stands out</div>
+              <CardTitle icon="sparkles" tone="teal">What stands out</CardTitle>
               <ul className="space-y-2">
                 {insights.map((i, k) => (
                   <li key={k} className="flex gap-2 text-sm">
@@ -138,10 +138,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
               {d.live && m.oldPending > 0 && <Link href="/review" className="mt-3 inline-block text-sm text-brand hover:underline">Open the old-task review <Icon name="arrowRight" size={14} className="inline -mt-0.5" /></Link>}
             </div>
             <div className="card p-4">
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                <div className="label">Needs attention now</div>
-                <span className="text-xs text-ink-3">Planned deliverables only · Client first</span>
-              </div>
+              <CardTitle icon="flag" tone="crit" note="Planned deliverables only · Client first">Needs attention now</CardTitle>
               {attention.length ? (
                 <ul className="divide-y divide-line">
                   {attention.map((r) => (
@@ -162,11 +159,11 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <div className="card p-4 lg:col-span-2">
-              <div className="label mb-2">Delivery & on-time, last 6 months</div>
+              <CardTitle icon="trendUp" tone="teal">Delivery & on-time, last 6 months</CardTitle>
               <TrendChart data={tr} />
             </div>
             <div className="card p-4">
-              <div className="label mb-3">Why work is pending</div>
+              <CardTitle icon="help" tone="warn">Why work is pending</CardTitle>
               <ReasonBars rows={m.reasons.map((r) => ({ label: r.label, count: r.count, href: `?month=${month}&reason=${r.reason}#reason-list` }))} />
             </div>
           </div>
@@ -189,7 +186,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
             </div>
           )}
 
-          <SectionTitle right={<span className="text-xs text-ink-3">Click a column to sort · waiting-on-client never counts as a person&apos;s slip</span>}>Team</SectionTitle>
+          <SectionTitle icon="users" right={<span className="text-xs text-ink-3">Click a column to sort · waiting-on-client never counts as a person&apos;s slip</span>}>Team</SectionTitle>
           <div className="card overflow-x-auto">
             <table className="tbl w-full">
               <thead>
@@ -220,10 +217,10 @@ export default async function Overview({ searchParams }: { searchParams: Promise
             </table>
           </div>
 
-          <SectionTitle right={<span className="text-xs text-ink-3">Open planned deliverables by due week</span>}>Workload</SectionTitle>
+          <SectionTitle icon="layers" right={<span className="text-xs text-ink-3">Open planned deliverables by due week</span>}>Workload</SectionTitle>
           <WorkloadStrip weeks={wl.weeks} rows={wl.rows} green={settings.workloadGreen} amber={settings.workloadAmber} month={month} />
 
-          <SectionTitle right={<Link href={`/clients?month=${month}`} className="text-xs text-brand hover:underline">Clients page <Icon name="arrowRight" size={14} className="inline -mt-0.5" /></Link>}>By client</SectionTitle>
+          <SectionTitle icon="briefcase" right={<Link href={`/clients?month=${month}`} className="text-xs text-brand hover:underline">Clients page <Icon name="arrowRight" size={14} className="inline -mt-0.5" /></Link>}>By client</SectionTitle>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {clients.map((c) => (
               <Link key={c.name} href={`/clients?month=${month}#${encodeURIComponent(c.name)}`} className="card lift p-4 hover:border-brand">

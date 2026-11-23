@@ -16,26 +16,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     : 0;
   const nav: NavItem[] = admin
     ? [
-        { href: "/overview", label: "Overview" },
-        { href: "/people", label: "Individual" },
-        { href: "/clients", label: "Clients" },
-        { href: "/plan", label: "Plan" },
-        { href: "/review", label: "Review" },
-        { href: "/approvals", label: "Approvals", count: pendingApprovals },
-        { href: "/reports", label: "Reports" },
-        { href: "/settings", label: "Settings" },
+        { href: "/overview", label: "Overview", icon: "grid" },
+        { href: "/people", label: "Individual", icon: "user" },
+        { href: "/clients", label: "Clients", icon: "briefcase" },
+        { href: "/plan", label: "Plan", icon: "calendar" },
+        { href: "/review", label: "Review", icon: "history" },
+        { href: "/approvals", label: "Approvals", icon: "inbox", count: pendingApprovals },
+        { href: "/reports", label: "Reports", icon: "file" },
+        { href: "/settings", label: "Settings", icon: "settings" },
       ]
     : [
-        { href: "/me", label: "My dashboard" },
-        { href: "/review", label: "Review" },
-        { href: "/backlog", label: "Backlog" },
+        { href: "/me", label: "My dashboard", icon: "home" },
+        { href: "/review", label: "Review", icon: "history" },
+        { href: "/backlog", label: "Backlog", icon: "archive" },
       ];
   return (
     <div className="min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:shadow-lg">
         Skip to content
       </a>
-      <header className="sticky top-0 z-20 border-b border-line bg-surface">
+      <header className="sticky top-0 z-20 border-b border-line bg-surface/80 backdrop-blur-xl supports-[backdrop-filter]:bg-surface/70">
         <div className="mx-auto grid max-w-[1400px] grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1 px-4 py-2 sm:px-5 2xl:grid-cols-[auto_minmax(0,1fr)_auto]">
           <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Growthmak Task Monitor home">
             <Logo height={26} />

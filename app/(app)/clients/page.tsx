@@ -46,8 +46,8 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2"><h2 className="text-lg font-semibold">{c.name}</h2><ClientTypeBadge type={c.type} /></div>
             <div className="flex flex-wrap gap-2">
-              <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}&view=1`} target="_blank" rel="noopener" className="btn">View client PDF<Icon name="external" size={14} /></a>
-              <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}`} className="btn">Download</a>
+              <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}&view=1`} target="_blank" rel="noopener" className="btn"><Icon name="eye" size={15} />View client PDF</a>
+              <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}`} className="btn"><Icon name="download" size={15} />Download</a>
             </div>
           </div>
           <div className="mt-3 grid gap-4 md:grid-cols-4 text-sm">

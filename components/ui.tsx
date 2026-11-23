@@ -49,6 +49,8 @@ export function Kpi({
   small = false,
   title,
   viz,
+  icon,
+  tone = "brand",
 }: {
   label: string;
   value: string;
@@ -60,6 +62,8 @@ export function Kpi({
   small?: boolean; // below 5 tasks: grey the value and say so
   title?: string;
   viz?: React.ReactNode; // a meter or split bar under the figure
+  icon?: import("./Icon").IconName;
+  tone?: "brand" | "teal" | "warn" | "crit";
 }) {
   let deltaEl = <span className="text-ink-3">no comparison</span>;
   if (delta !== undefined && delta !== null) {
@@ -76,7 +80,10 @@ export function Kpi({
   }
   return (
     <div className="card p-4 min-w-0" title={title}>
-      <div className="label">{label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="label">{label}</div>
+        {icon && <span className={`chip ${tone === "brand" ? "" : `chip-${tone}`}`} aria-hidden><Icon name={icon} size={15} /></span>}
+      </div>
       <div className={`mt-1 text-3xl font-semibold tracking-tight ${small ? "text-ink-3" : ""}`}>{figure(value)}</div>
       {small && <div className="text-[11px] text-ink-3">small sample</div>}
       {sub && <div className="mt-0.5 text-xs text-ink-2 num">{sub}</div>}
@@ -105,10 +112,13 @@ export function Bar({ value, color = "rgb(var(--brand))", delay = 0 }: { value: 
   );
 }
 
-export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+export function SectionTitle({ children, right, icon }: { children: React.ReactNode; right?: React.ReactNode; icon?: import("./Icon").IconName }) {
   return (
-    <div className="flex items-end justify-between gap-3 mb-3 mt-8">
-      <h2 className="text-base font-semibold">{children}</h2>
+    <div className="mb-3 mt-8 flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
+      <h2 className="flex items-center gap-2.5 text-base font-semibold">
+        {icon && <span className="chip" aria-hidden><Icon name={icon} size={15} /></span>}
+        {children}
+      </h2>
       {right}
     </div>
   );
@@ -159,5 +169,19 @@ export function ConfPill({ value }: { value: number | null | undefined }) {
     <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap" style={{ background: m.color, color: m.text }} title="Confidence set by the assignee">
       Conf. {m.label}
     </span>
+  );
+}
+
+
+/** Card header: an icon badge, the title, and an optional note on the right. */
+export function CardTitle({ icon, children, note, tone = "brand" }: { icon: import("./Icon").IconName; children: React.ReactNode; note?: React.ReactNode; tone?: "brand" | "teal" | "warn" | "crit" }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <div className="flex items-center gap-2.5">
+        <span className={`chip ${tone === "brand" ? "" : `chip-${tone}`}`} aria-hidden><Icon name={icon} size={15} /></span>
+        <h2 className="text-sm font-semibold">{children}</h2>
+      </div>
+      {note && <span className="text-xs text-ink-3">{note}</span>}
+    </div>
   );
 }

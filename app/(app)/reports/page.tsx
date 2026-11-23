@@ -49,10 +49,10 @@ export default async function Reports() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <form action={regenerateReport}><input type="hidden" name="month" value={m} /><button className="btn" title="Rebuild with the latest reasons, reviews and summary">Rebuild</button></form>
-                  <form action={postReportNow}><input type="hidden" name="month" value={m} /><button className="btn">Post to Cliq</button></form>
-                  <a className="btn btn-primary" href={`/api/reports/${m}?view=1`} target="_blank" rel="noopener">View report<Icon name="external" size={14} /></a>
-                  <a className="btn" href={`/api/reports/${m}`}>Download PDF</a>
+                  <form action={regenerateReport}><input type="hidden" name="month" value={m} /><button className="btn" title="Rebuild with the latest reasons, reviews and summary"><Icon name="refresh" size={15} />Rebuild</button></form>
+                  <form action={postReportNow}><input type="hidden" name="month" value={m} /><button className="btn"><Icon name="send" size={15} />Post to Cliq</button></form>
+                  <a className="btn btn-primary" href={`/api/reports/${m}?view=1`} target="_blank" rel="noopener"><Icon name="eye" size={15} />View report</a>
+                  <a className="btn" href={`/api/reports/${m}`}><Icon name="download" size={15} />Download</a>
                 </div>
               </div>
               {summaries.has(m) && (

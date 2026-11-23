@@ -65,8 +65,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <div className="text-xs text-ink-3">Last successful sync: {lastOk ? fmtDateTime(new Date(lastOk)) : "never"}</div>
           <div className={`text-xs ${canWrite ? "text-goodText" : "text-warnText"}`}>{canWrite ? "Can apply approved changes (edit access)" : "Read-only connection — reconnect to allow approved changes to update Zoho"}</div>
           <div className="flex flex-wrap gap-2 pt-1">
-            {zohoConfigured() ? <a href="/api/auth/login?purpose=connect" className="btn">{connected ? "Reconnect" : "Connect Zoho Projects"}</a> : <span className="text-xs text-crit">Set ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET first</span>}
-            {connected && <form action={syncNow}><button className="btn btn-primary">Sync now</button></form>}
+            {zohoConfigured() ? <a href="/api/auth/login?purpose=connect" className="btn"><Icon name="refresh" size={15} />{connected ? "Reconnect" : "Connect Zoho Projects"}</a> : <span className="text-xs text-crit">Set ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET first</span>}
+            {connected && <form action={syncNow}><button className="btn btn-primary"><Icon name="refresh" size={15} />Sync now</button></form>}
           </div>
         </div>
         <div className="card p-4 space-y-2">
@@ -77,7 +77,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <div className="card p-4 space-y-2">
           <Head title="Zoho Cliq alerts" ok={cliqConfigured()} />
           <p className="text-sm text-ink-2">Posts automatically to <b>#{config.cliq.channel || "—"}</b> when a task turns Tight or At Risk.</p>
-          {cliqConfigured() && <form action={testCliq}><button className="btn">Send test message</button></form>}
+          {cliqConfigured() && <form action={testCliq}><button className="btn"><Icon name="send" size={15} />Send test message</button></form>}
           <ul className="text-xs text-ink-2 space-y-1 pt-1">
             {alerts.map((a) => <li key={a.id} className="flex items-center gap-1.5" title={a.error ?? undefined}><Icon name={a.ok ? "check" : "x"} size={12} className={a.ok ? "text-goodText" : "text-crit"} label={a.ok ? "Sent" : "Failed"} /><span className="truncate">{fmtDateTime(a.sentAt)} · {a.task.name}{!a.ok && a.error ? ` — ${a.error}` : ""}</span></li>)}
           </ul>
@@ -91,7 +91,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
       <div>
         <div className="flex items-end justify-between mb-1">
-          <h2 className="text-base font-semibold">Feedback</h2>
+          <h2 className="text-base font-semibold flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="mail" size={15} /></span>Feedback</h2>
           <span className="text-xs text-ink-3">{feedback.length ? `Latest ${feedback.length}` : ""}</span>
         </div>
         <p className="text-sm text-ink-2 mb-3">Everything sent from the Feedback button. Each one is also emailed to {config.mail.feedbackTo}.</p>
@@ -113,7 +113,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       </div>
 
       <div>
-        <h2 className="text-base font-semibold mb-1">Client mapping</h2>
+        <h2 className="text-base font-semibold mb-1 flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="briefcase" size={15} /></span>Client mapping</h2>
         <p className="text-sm text-ink-2 mb-3">Client name and type come from each Zoho project (a &quot;Client&quot; / &quot;Client Type&quot; custom field, or a <code>client:Name</code> tag). A task tagged <code>client:Name</code> is counted under that client even if it sits in an internal project. Use an override only to fix a mishap.</p>
         <div className="card overflow-x-auto">
           <table className="tbl w-full">
@@ -144,7 +144,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div>
-          <h2 className="text-base font-semibold mb-3">People & access</h2>
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="users" size={15} /></span>People & access</h2>
           <div className="card overflow-x-auto">
             <table className="tbl w-full">
               <thead><tr><th>Name</th><th>Email</th><th>Access</th><th></th></tr></thead>
@@ -196,7 +196,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           )}
         </div>
         <div>
-          <h2 className="text-base font-semibold mb-3">Recent jobs</h2>
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="refresh" size={15} /></span>Recent jobs</h2>
           <div className="card divide-y divide-line">
             {logs.map((l) => (
               <div key={l.id} className="flex items-start justify-between gap-3 p-3 text-sm">
@@ -210,7 +210,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       </div>
 
       <div>
-        <h2 className="text-base font-semibold mb-1">Planning & alerts</h2>
+        <h2 className="text-base font-semibold mb-1 flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="calendar" size={15} /></span>Planning & alerts</h2>
         <form action={saveSettingsAction} className="card p-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3 text-sm">
           <label className="block">CC on every Cliq alert
             <input name="ccEmails" defaultValue={st.ccEmails.join(", ")} className="mt-1 w-full" />
@@ -271,7 +271,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
-          <h2 className="text-base font-semibold mb-1">Cliq mapping</h2>
+          <h2 className="text-base font-semibold mb-1 flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="message" size={15} /></span>Cliq mapping</h2>
           <p className="text-sm text-ink-2 mb-3">Alerts @mention people by their Zoho email. If someone&apos;s Cliq address is different, set it here.</p>
           <div className="card divide-y divide-line">
             {users.filter((u) => u.active).map((u) => (
@@ -286,7 +286,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           </div>
         </div>
         <div>
-          <h2 className="text-base font-semibold mb-1">Recurring deliverables</h2>
+          <h2 className="text-base font-semibold mb-1 flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="history" size={15} /></span>Recurring deliverables</h2>
           <p className="text-sm text-ink-2 mb-3">Monthly retainer work (e.g. &quot;Google Ads Maintenance&quot;, &quot;4 Blogs&quot;). Any task in the project whose name contains the title is always planned.</p>
           <form action={addRecurring} className="card p-3 flex flex-wrap gap-2 text-sm">
             <select name="projectId" required defaultValue="" className="min-w-44">
@@ -316,7 +316,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       </div>
 
       <div>
-        <h2 className="text-base font-semibold mb-3">Audit log</h2>
+        <h2 className="text-base font-semibold mb-3 flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="file" size={15} /></span>Audit log</h2>
         <div className="card divide-y divide-line">
           {auditRows.map((a) => (
             <div key={a.id} className="grid gap-x-4 gap-y-0.5 p-3 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]">

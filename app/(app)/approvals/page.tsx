@@ -88,7 +88,7 @@ export default async function Approvals() {
         </div>
       )}
 
-      <h2 className="mt-6 text-base font-semibold">Delay reasons to review <span className="num font-normal text-ink-3">· {toReview.length}</span></h2>
+      <h2 className="mt-6 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-warn" aria-hidden><Icon name="message" size={15} /></span>Delay reasons to review <span className="num font-normal text-ink-3">· {toReview.length}</span></h2>
       <p className="mt-0.5 text-sm text-ink-2">Agree if it holds up. Ask for proof when it doesn&apos;t: they&apos;ll be tagged in Cliq and asked to email you, with the CC list from Settings copied.</p>
       {toReview.length ? (
         <ul className="mt-3 grid gap-3 xl:grid-cols-2">{toReview.map((r) => <ReasonCard key={r.id} r={r} />)}</ul>
@@ -98,7 +98,7 @@ export default async function Approvals() {
 
       {awaitingProof.length > 0 && (
         <>
-          <h2 className="mt-8 text-base font-semibold">Waiting for proof <span className="num font-normal text-ink-3">· {awaitingProof.length}</span></h2>
+          <h2 className="mt-8 text-base font-semibold flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="mail" size={15} /></span>Waiting for proof <span className="num font-normal text-ink-3">· {awaitingProof.length}</span></h2>
           <div className="mt-3 card divide-y divide-line">
             {awaitingProof.map((r) => (
               <div key={r.id} className="grid gap-1 p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -118,14 +118,14 @@ export default async function Approvals() {
         </>
       )}
 
-      <h2 className="mt-8 text-base font-semibold">Zoho updates waiting <span className="num font-normal text-ink-3">· {pending.length}</span></h2>
+      <h2 className="mt-8 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="refresh" size={15} /></span>Zoho updates waiting <span className="num font-normal text-ink-3">· {pending.length}</span></h2>
       <p className="mt-0.5 text-sm text-ink-2">Old-task Keep / Backlog / Close decisions and recurring deliverables. They already count in the dashboard; Zoho changes only when you approve. Rejecting a review change undoes that decision.</p>
       {!pending.length ? (
         <div className="mt-3"><Empty>No Zoho updates waiting.</Empty></div>
       ) : (
         <>
           <form id="bulk-approve" className="mt-3 flex flex-wrap gap-2">
-            <button formAction={approveChanges} className="btn btn-primary">Approve selected and update Zoho</button>
+            <button formAction={approveChanges} className="btn btn-primary"><Icon name="check" size={15} />Approve selected and update Zoho</button>
             <button formAction={rejectChanges} className="btn">Reject selected</button>
           </form>
           <div className="mt-3 card overflow-x-auto">
@@ -143,7 +143,7 @@ export default async function Approvals() {
                     <td className="whitespace-nowrap">
                       <form className="flex gap-1">
                         <input type="hidden" name="changeId" value={c.id} />
-                        <button formAction={approveChanges} className="btn btn-primary">{c.status === "FAILED" ? "Retry" : "Approve"}</button>
+                        <button formAction={approveChanges} className="btn btn-primary"><Icon name={c.status === "FAILED" ? "refresh" : "check"} size={14} />{c.status === "FAILED" ? "Retry" : "Approve"}</button>
                         <button formAction={rejectChanges} className="btn">Reject</button>
                       </form>
                     </td>
@@ -155,7 +155,7 @@ export default async function Approvals() {
         </>
       )}
 
-      <h2 className="mt-8 mb-3 text-base font-semibold">Recent decisions</h2>
+      <h2 className="mt-8 mb-3 text-base font-semibold flex items-center gap-2.5"><span className="chip" aria-hidden><Icon name="history" size={15} /></span>Recent decisions</h2>
       <div className="card divide-y divide-line">
         {[
           ...reasonHistory.map((r) => ({

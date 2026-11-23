@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
-export type NavItem = { href: string; label: string; count?: number };
+export type NavItem = { href: string; label: string; icon: IconName; count?: number };
 
 /** Top navigation. Runs in the browser so the active tab follows every page change.
  *  Below 1536px it sits on its own row and scrolls sideways instead of squeezing the header. */
@@ -23,6 +23,7 @@ export function MainNav({ items }: { items: NavItem[] }) {
               active ? "bg-brand-soft text-brand-dark" : "text-ink-2 hover:bg-plane hover:text-ink"
             }`}
           >
+            <Icon name={n.icon} size={15} className={active ? "" : "opacity-80"} />
             {n.label}
             {!!n.count && (
               <span className="num min-w-[18px] rounded-full bg-crit px-1.5 text-center text-[11px] font-semibold leading-[18px] text-white" aria-label={`${n.count} waiting`}>

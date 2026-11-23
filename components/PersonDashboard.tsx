@@ -138,16 +138,16 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
           <>
             <PaceBand completed={m.completed} planned={m.planned} inReview={d.rows.filter((r) => !r.done && r.task.bucket === "REVIEW").length} elapsed={elapsed} live={d.live} who={own ? "you" : person.name.split(" ")[0]} />
             <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-              <Kpi vs={vs} label="Delivery" value={pctBig(m.delivery)} sub={`${m.completed} of ${m.planned} planned`} small={m.delivery.small} delta={dl(m.delivery.value, prev?.delivery.value)}
+              <Kpi vs={vs} label="Delivery" icon="target" tone="brand" value={pctBig(m.delivery)} sub={`${m.completed} of ${m.planned} planned`} small={m.delivery.small} delta={dl(m.delivery.value, prev?.delivery.value)}
                 viz={<Meter value={m.delivery.value} tone={m.delivery.small ? "none" : paceTone(m.completed, m.planned, frac).tone} delay={100} label={`Delivery ${pctBig(m.delivery)}`} />} />
-              <Kpi vs={vs} label="Client / Internal" value={`${pctBig(m.client.delivery)} / ${pctBig(m.internal.delivery)}`} sub={`${m.client.completed}/${m.client.planned} client · ${m.internal.completed}/${m.internal.planned} internal`}
+              <Kpi vs={vs} label="Client / Internal" icon="briefcase" tone="teal" value={`${pctBig(m.client.delivery)} / ${pctBig(m.internal.delivery)}`} sub={`${m.client.completed}/${m.client.planned} client · ${m.internal.completed}/${m.internal.planned} internal`}
                 viz={<SplitBar delay={160} label={`${m.client.planned} client and ${m.internal.planned} internal deliverables planned`} parts={[{ label: "client", value: m.client.planned }, { label: "internal", value: m.internal.planned, color: "var(--c-series-3)" }]} />} />
-              <Kpi vs={vs} label="On time" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)}
+              <Kpi vs={vs} label="On time" icon="clock" tone="teal" value={pctBig(m.onTime)} sub={`${m.onTime.n} of ${m.onTime.d} finished`} small={m.onTime.small} delta={dl(m.onTime.value, prev?.onTime.value)}
                 viz={<Meter value={m.onTime.value} tone={m.onTime.small ? "none" : onTimeTone(m.onTime.value)} delay={220} label={`On time ${pctBig(m.onTime)}`} />} />
-              <Kpi vs={vs} label="Slipped" value={String(mine.length)} goodWhenUp={false} unit="tasks" delta={dl(m.slipped, prev?.slipped)}
+              <Kpi vs={vs} label="Slipped" icon="trendDown" tone="crit" value={String(mine.length)} goodWhenUp={false} unit="tasks" delta={dl(m.slipped, prev?.slipped)}
                 viz={<><SplitBar delay={280} label={parts.map((p) => `${p.value} ${p.label}`).join(", ")} parts={parts} /><PartsLegend parts={parts} /></>} />
-              <Kpi vs={vs} label="Waiting on client" value={String(m.waitingClient)} sub="not counted as your miss" />
-              <Kpi vs={vs} label="Unplanned done" value={String(m.unplannedDone)} sub={d.live ? `${m.atRisk} at risk now` : "not penalised"} />
+              <Kpi vs={vs} label="Waiting on client" icon="hourglass" tone="warn" value={String(m.waitingClient)} sub="not counted as your miss" />
+              <Kpi vs={vs} label="Unplanned done" icon="zap" tone="brand" value={String(m.unplannedDone)} sub={d.live ? `${m.atRisk} at risk now` : "not penalised"} />
             </div>
           </>
         );
@@ -155,7 +155,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
 
       <div className="mt-4 card p-4">
         <div className="flex items-center justify-between">
-          <div className="label">Monthly review · {monthLabel(month)}</div>
+          <div className="flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="target" size={15} /></span><h2 className="text-sm font-semibold">Monthly review · {monthLabel(month)}</h2></div>
           {review && <span className="text-xs text-ink-3">by {review.reviewer.name}, {fmtDateTime(review.updatedAt)}</span>}
         </div>
         {admin ? (
@@ -207,7 +207,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
       {myReasons.length > 0 && (
         <section className="mt-6 card p-4" aria-label="Delay reasons">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold">{own ? "Your delay reasons" : "Delay reasons"}</h2>
+            <h2 className="flex items-center gap-2.5 text-sm font-semibold"><span className="chip chip-warn" aria-hidden><Icon name="message" size={15} /></span>{own ? "Your delay reasons" : "Delay reasons"}</h2>
             <span className="text-xs text-ink-3">Last 30 days · every reason is reviewed by a manager</span>
           </div>
           <ul className="mt-2 divide-y divide-line">

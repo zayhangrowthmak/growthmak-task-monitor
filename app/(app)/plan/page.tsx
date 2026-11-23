@@ -53,7 +53,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         </div>
         <div className="flex items-center gap-3">
           {d.plan?.status === "DRAFT" && (
-            <form action={lockPlanNow}><input type="hidden" name="month" value={month} /><button className="btn btn-primary">Lock plan now</button></form>
+            <form action={lockPlanNow}><input type="hidden" name="month" value={month} /><button className="btn btn-primary"><Icon name="calendar" size={15} />Lock plan now</button></form>
           )}
           <MonthPicker months={options.filter((o) => o.value !== ALL)} value={month} />
         </div>
@@ -99,7 +99,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 
       {editable && isCur && (
         <>
-          <h2 className="mt-8 mb-2 text-base font-semibold">Unplanned this month ({d.unplannedOpen.length})</h2>
+          <h2 className="mt-8 mb-2 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-warn" aria-hidden><Icon name="zap" size={15} /></span>Unplanned this month ({d.unplannedOpen.length})</h2>
           <p className="text-sm text-ink-2 mb-3">Due in {monthLabel(month)} but added after the plan locked. Promote to count them in the plan (logged).</p>
           <div className="card divide-y divide-line">
             {d.unplannedOpen.map((r) => (
@@ -115,7 +115,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 
       {d.removed.length > 0 && (
         <>
-          <h2 className="mt-8 mb-2 text-base font-semibold">Removed from the plan ({d.removed.length})</h2>
+          <h2 className="mt-8 mb-2 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-crit" aria-hidden><Icon name="x" size={15} /></span>Removed from the plan ({d.removed.length})</h2>
           <div className="card divide-y divide-line">
             {d.removed.map((r) => (
               <div key={r.task.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
@@ -127,7 +127,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         </>
       )}
 
-      <h2 className="mt-8 mb-2 text-base font-semibold">Recurring deliverables</h2>
+      <h2 className="mt-8 mb-2 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="history" size={15} /></span>Recurring deliverables</h2>
       <p className="text-sm text-ink-2 mb-3">Always planned. Templates are managed in Settings. If one has no Zoho task this month, you can ask to create it (needs approval).</p>
       <div className="card divide-y divide-line">
         {recurringStatus.map(({ t, hit }) => (

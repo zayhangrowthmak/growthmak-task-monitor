@@ -73,7 +73,7 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
                   <input type="date" name="newDueDate" defaultValue={defaultDue} className="ml-2" />
                 </label>
                 <input name="note" placeholder="Note (optional)" className="min-w-56 flex-1" />
-                <button className="btn btn-primary">Apply to selected</button>
+                <button className="btn btn-primary"><Icon name="check" size={15} />Apply to selected</button>
               </form>
 
               {/* Phones: one card per task, decision controls in reach */}
@@ -163,7 +163,7 @@ export default async function Review({ searchParams }: { searchParams: Promise<R
 
           {decided.length > 0 && (
             <>
-              <h2 className="mt-8 mb-3 text-base font-semibold">Decided ({decided.length})</h2>
+              <h2 className="mt-8 mb-3 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="check" size={15} /></span>Decided ({decided.length})</h2>
               <div className="card divide-y divide-line">
                 {decided.map((o) => (
                   <div key={o.task.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
