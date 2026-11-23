@@ -8,7 +8,10 @@ import { MonthPicker, PersonPicker } from "./Pickers";
 import { Kpi, Empty, PctText, pctBig, StatePill } from "./ui";
 import { Kanban, TaskList, TaskDetail, SlipReasonForm } from "./Tasks";
 import { saveReview } from "@/app/actions";
-import { bucketLabel } from "@/lib/status";
+import { bucketLabel, slipLabel } from "@/lib/status";
+import { VERDICT_LABEL } from "@/lib/reasons";
+import { markProofSentAction } from "@/app/actions";
+import { Icon } from "./Icon";
 import { getSettings } from "@/lib/settings";
 import { workdayProgress } from "@/lib/workdays";
 import { Meter, SplitBar, PartsLegend, PaceBand, paceTone, onTimeTone } from "./Viz";
@@ -35,6 +38,17 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
   const prev = await previousFor(d, person.id);
   const admin = viewer.role === "ADMIN";
   const own = viewer.id === person.id;
+  // Delay reasons this person gave (or on their tasks), and where each one stands with the managers
+  const myReasons = await prisma.reasonReview.findMany({
+    where: {
+      OR: [{ submittedById: person.id }, { task: { assignees: { some: { userId: person.id } } } }],
+      AND: [{ OR: [{ status: { in: ["PENDING", "PROOF_REQUESTED", "PROOF_SENT"] } }, { decidedAt: { gte: new Date(Date.now() - 30 * 86_400_000) } }] }],
+    },
+    include: { task: true, decidedBy: true },
+    orderBy: { submittedAt: "desc" },
+    take: 20,
+  });
+  const proofAsked = myReasons.filter((r) => r.status === "PROOF_REQUESTED");
   const review = await prisma.monthlyReview.findUnique({ where: { userId_month: { userId: person.id, month } }, include: { reviewer: true } });
   const people = admin ? await prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
   const qs = (extra: Record<string, string | undefined>) => {
@@ -68,6 +82,31 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
           <MonthPicker months={options.filter((o) => o.value !== ALL)} value={month} />
         </div>
       </div>
+
+      {proofAsked.length > 0 && (
+        <div className="mt-4 rounded-xl border border-warn bg-warn/10 p-4" role="status">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Icon name="mail" size={16} />
+            {own ? "Proof requested from you" : `Proof requested from ${person.name.split(" ")[0]}`} ({proofAsked.length})
+          </div>
+          <ul className="mt-2 space-y-3">
+            {proofAsked.map((r) => (
+              <li key={r.id} className="text-sm">
+                <Link href={qs({ task: r.taskId })} scroll={false} className="font-medium hover:text-brand">{r.task.key} {r.task.name}</Link>
+                <p className="text-ink-2"><b className="font-medium text-ink">{r.decidedBy?.name}</b> asks: {r.managerNote}</p>
+                {(own || admin) && (
+                  <form action={markProofSentAction} className="mt-1.5 flex flex-wrap gap-2">
+                    <input type="hidden" name="reasonId" value={r.id} />
+                    <input name="proofNote" placeholder="Optional: what you sent" aria-label="What you sent" className="min-w-[14rem] flex-1" maxLength={500} />
+                    <button className="btn btn-primary">I&apos;ve emailed the proof</button>
+                  </form>
+                )}
+                <p className="mt-1 text-xs text-ink-3">Email {r.decidedBy?.email} with the CC list copied, then confirm here.</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {needReason.length > 0 && (
         <div className="mt-4 rounded-xl border border-crit bg-crit/5 p-4">
@@ -164,6 +203,29 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
           <div className="mt-2 text-sm text-ink-3">No review yet for this month.</div>
         )}
       </div>
+
+      {myReasons.length > 0 && (
+        <section className="mt-6 card p-4" aria-label="Delay reasons">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold">{own ? "Your delay reasons" : "Delay reasons"}</h2>
+            <span className="text-xs text-ink-3">Last 30 days · every reason is reviewed by a manager</span>
+          </div>
+          <ul className="mt-2 divide-y divide-line">
+            {myReasons.map((r) => (
+              <li key={r.id} className="grid gap-x-3 gap-y-0.5 py-2 text-sm sm:grid-cols-[9.5rem_minmax(0,1fr)]">
+                <span className={`h-fit w-fit rounded-full px-2 py-0.5 text-[11px] font-semibold ${({ PENDING: "bg-plane text-ink-2", PROOF_SENT: "bg-brand-soft text-brand-dark", PROOF_REQUESTED: "bg-warn/20 text-warnText", AGREED: "bg-good/10 text-goodText", DISAGREED: "bg-crit/10 text-crit" } as const)[r.status]}`}>
+                  {VERDICT_LABEL[r.status]}
+                </span>
+                <span className="min-w-0">
+                  <Link href={qs({ task: r.taskId })} scroll={false} className="hover:text-brand">{r.task.key} {r.task.name}</Link>
+                  <span className="text-ink-2"> · {slipLabel(r.reason)}</span>
+                  {r.managerNote && <span className="block text-xs text-ink-2">{r.decidedBy?.name}: {r.managerNote}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mt-8 mb-3 flex flex-wrap items-end justify-between gap-3">
         <div className="max-w-full rounded-lg border border-line bg-field p-0.5"><div className="scroll-x no-scrollbar fade-x-sm flex gap-1 text-sm" role="tablist" aria-label="Task groups">

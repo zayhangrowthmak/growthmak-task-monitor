@@ -32,6 +32,7 @@ export async function startMock(): Promise<Mock> {
   const cliqMessages: Mock["cliqMessages"] = [];
   const cliqFiles: string[] = [];
   const writes: Mock["writes"] = [];
+  const taskComments = new Map<string, any[]>();
   let msgSeq = 0;
 
   const owner = (name: string, email: string, zpuid: string) => ({ owners_and_work: { owners: [{ zpuid, name, email }] } });
@@ -113,10 +114,16 @@ export async function startMock(): Promise<Mock> {
         if (st) statusOverride.set(one[1], { name: st.name, is_closed_type: st.is_closed_type });
         return json({ tasks: [{ id: one[1] }] });
       }
-      if (u.pathname.match(/\/tasks\/\d+\/comments$/) && req.method === "POST") {
-        writes.push({ method: "POST", path: u.pathname, body: JSON.parse(body || "{}") });
+      const cm = u.pathname.match(/\/tasks\/(\d+)\/comments$/);
+      if (cm && req.method === "POST") {
+        const b = JSON.parse(body || "{}");
+        writes.push({ method: "POST", path: u.pathname, body: b });
+        const list = taskComments.get(cm[1]) ?? [];
+        list.push({ id: `c${list.length + 1}`, comment: `<p>${b.comment ?? b.content}</p>`, created_by: { name: "Task Monitor" }, created_time: new Date().toISOString() });
+        taskComments.set(cm[1], list);
         return json({ comments: [{ id: "c1" }] });
       }
+      if (cm) return json({ comments: taskComments.get(cm[1]) ?? [] });
       if (one) {
         const t = tasks().find((x) => x.id === one[1]);
         return t ? json({ tasks: [t] }) : json({ error: "not found" }, 404);

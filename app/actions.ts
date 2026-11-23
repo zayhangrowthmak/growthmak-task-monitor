@@ -32,6 +32,10 @@ export async function addComment(form: FormData) {
   await prisma.taskComment.create({
     data: { taskId: task.id, authorId: user.id, reason: data.reason, text: data.text, month: isValidMonth(data.month) ? data.month : currentMonth() },
   });
+  // Two-way: the comment also appears on the Zoho task
+  const { queueZohoComment } = await import("@/lib/reasons");
+  await queueZohoComment(task.id, `${user.name} (via Task Monitor): ${data.text}`, "comment", user.id);
+  sendNow();
   if (data.flag === "on" && !task.isClosed) {
     await prisma.task.update({ where: { id: task.id }, data: { flaggedAtRisk: true } });
     await refreshConfidence({ taskIds: [task.id] });
@@ -176,8 +180,42 @@ export async function setSlipReason(form: FormData) {
   const d = z.object({ taskId: z.string(), reason: SLIP, note: z.string().trim().max(1000).optional() }).parse(Object.fromEntries(form));
   if (!(await canActOn(user, d.taskId))) throw new Error("Not your task");
   if (d.reason === "OTHER" && !d.note) throw new Error("Add a note for Other");
-  await prisma.task.update({ where: { id: d.taskId }, data: { slipReason: d.reason, slipNote: d.note || null, slipAt: new Date() } });
-  await audit(user, "task.slip_reason", "Task", d.taskId, { reason: d.reason, note: d.note });
+  const { submitReason } = await import("@/lib/reasons");
+  await submitReason(user, d.taskId, d.reason, d.note || null);
+  sendNow();
+  revalidatePath("/", "layout");
+}
+
+/** Send queued Zoho comments and Cliq posts without waiting for the next scheduler tick. */
+function sendNow() {
+  void (async () => {
+    const { flushZohoComments } = await import("@/lib/reasons");
+    const { flushOutbox } = await import("@/lib/cliq");
+    await flushZohoComments().catch((e) => console.error("[zoho comments]", e));
+    await flushOutbox().catch((e) => console.error("[cliq]", e));
+  })();
+}
+
+/** Manager: agree, disagree or ask for proof on one or more delay reasons, with a note. */
+export async function decideReasonAction(form: FormData) {
+  const admin = await requireAdmin();
+  const verdict = z.enum(["AGREED", "DISAGREED", "PROOF_REQUESTED"]).parse(form.get("verdict"));
+  const note = String(form.get("managerNote") ?? "").trim().slice(0, 1000) || null;
+  const ids = form.getAll("reasonId").map(String).filter(Boolean);
+  if (!ids.length) throw new Error("Pick at least one reason");
+  const { decideReason } = await import("@/lib/reasons");
+  for (const id of ids) await decideReason(admin, id, verdict, note);
+  sendNow();
+  revalidatePath("/", "layout");
+}
+
+/** Team member: "I've emailed the proof". */
+export async function markProofSentAction(form: FormData) {
+  const user = await requireUser();
+  const note = String(form.get("proofNote") ?? "").trim().slice(0, 500) || null;
+  const { markProofSent } = await import("@/lib/reasons");
+  await markProofSent(user, String(form.get("reasonId")), note);
+  sendNow();
   revalidatePath("/", "layout");
 }
 

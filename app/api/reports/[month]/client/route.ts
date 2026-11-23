@@ -15,6 +15,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ mont
   const pdf = await renderClientPdf(month, name);
   const safe = name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
   return new NextResponse(new Uint8Array(pdf), {
-    headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${safe}-${month}-deliverables.pdf"` },
+    headers: { "Content-Type": "application/pdf", "Content-Disposition": `${req.nextUrl.searchParams.get("view") ? "inline" : "attachment"}; filename="${safe}-${month}-deliverables.pdf"`, "Cache-Control": "private, no-store" },
   });
 }

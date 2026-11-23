@@ -15,6 +15,7 @@ export const taskInclude = {
   project: true,
   assignees: { include: { user: true } },
   comments: { include: { author: true }, orderBy: { createdAt: "desc" } },
+  reasonReviews: { include: { decidedBy: true }, orderBy: { submittedAt: "desc" }, take: 1 },
 } satisfies Prisma.TaskInclude;
 
 export type FullTask = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;

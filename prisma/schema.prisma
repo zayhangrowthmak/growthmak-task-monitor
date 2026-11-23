@@ -72,6 +72,7 @@ enum ChangeKind {
   SET_STATUS // move to a status by name (Backlog, Closed - Not needed …)
   CLEAR_DUE // remove the due date (Backlog)
   CREATE_TASK // create a recurring deliverable
+  ADD_COMMENT // post a comment on the task (two-way sync; sent automatically, no approval)
 }
 
 enum ChangeStatus {
@@ -120,6 +121,8 @@ model User {
   assignments   TaskAssignee[]
   comments      TaskComment[]
   reviewsGiven  MonthlyReview[] @relation("reviewer")
+  reasonsGiven  ReasonReview[]  @relation("reasonSubmitter")
+  reasonsJudged ReasonReview[]  @relation("reasonDecider")
   reviews       MonthlyReview[] @relation("subject")
 }
 
@@ -189,6 +192,7 @@ model Task {
 
   assignees       TaskAssignee[]
   comments        TaskComment[]
+  reasonReviews   ReasonReview[]
   alerts          AlertLog[]
 
   @@index([projectId])
@@ -409,8 +413,43 @@ model ZohoChange {
   decidedById String?
   decidedAt   DateTime?
   error       String?
+  auto        Boolean      @default(false) // true: sent by the scheduler without approval (comments)
+  attempts    Int          @default(0)
 
   @@index([status])
+  @@index([auto, status])
+}
+
+/// A manager's review of a delay reason a team member gave
+enum ReasonVerdict {
+  PENDING // waiting for a manager
+  AGREED
+  DISAGREED
+  PROOF_REQUESTED // manager asked for an official email with evidence
+  PROOF_SENT // member says the email is sent; back with the manager
+}
+
+model ReasonReview {
+  id            String        @id @default(cuid())
+  taskId        String
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  month         String
+  reason        SlipReason
+  note          String?
+  submittedById String?
+  submittedBy   User?         @relation("reasonSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  submittedAt   DateTime      @default(now())
+  status        ReasonVerdict @default(PENDING)
+  managerNote   String?
+  decidedById   String?
+  decidedBy     User?         @relation("reasonDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt     DateTime?
+  proofAskedAt  DateTime?
+  proofSentAt   DateTime?
+  proofNote     String?
+
+  @@index([status])
+  @@index([taskId])
 }
 
 model RecurringTemplate {

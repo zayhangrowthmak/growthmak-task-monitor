@@ -3,7 +3,10 @@ import type { Row } from "@/lib/metrics";
 import { BUCKETS, BUCKET_COLOR, REASONS, SLIP_REASONS, reasonLabel, slipLabel, bucketLabel } from "@/lib/status";
 import { fmtDate, fmtDateTime } from "@/lib/time";
 import { StatePill, ConfPill } from "./ui";
-import { addComment, setConfidence, setSlipReason } from "@/app/actions";
+import { addComment, setConfidence, setSlipReason, markProofSentAction } from "@/app/actions";
+import { Suspense } from "react";
+import { ZohoComments } from "./ZohoComments";
+import { VERDICT_LABEL } from "@/lib/reasons";
 import { peopleLabel } from "@/lib/people";
 import { Icon } from "./Icon";
 
@@ -167,6 +170,38 @@ export function SlipReasonForm({ r }: { r: Row }) {
   );
 }
 
+type Rv = Row["task"]["reasonReviews"][number];
+const VERDICT_STYLE: Record<string, string> = {
+  PENDING: "bg-plane text-ink-2",
+  PROOF_SENT: "bg-brand-soft text-brand-dark",
+  PROOF_REQUESTED: "bg-warn/20 text-warnText",
+  AGREED: "bg-good/10 text-goodText",
+  DISAGREED: "bg-crit/10 text-crit",
+};
+
+/** Where the manager's review of this reason stands; asks for proof when needed. */
+export function ReasonStatus({ rv, canEdit }: { rv: Rv; canEdit: boolean }) {
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${VERDICT_STYLE[rv.status]}`}>{VERDICT_LABEL[rv.status]}</span>
+        <span className="text-xs text-ink-3">{slipLabel(rv.reason)} · given {fmtDate(rv.submittedAt)}</span>
+      </div>
+      {rv.managerNote && (
+        <p className="text-ink-2"><b className="font-medium text-ink">{rv.decidedBy?.name ?? "Manager"}:</b> {rv.managerNote}</p>
+      )}
+      {rv.status === "PROOF_REQUESTED" && canEdit && (
+        <form action={markProofSentAction} className="space-y-2 rounded-lg border border-warn bg-warn/10 p-3">
+          <input type="hidden" name="reasonId" value={rv.id} />
+          <p className="text-xs text-ink-2">Send an official email to {rv.decidedBy?.email ?? "your manager"} with the CC list copied, then confirm here.</p>
+          <input name="proofNote" placeholder="Optional: what you sent (e.g. client email of 12 Nov)" className="w-full" maxLength={500} />
+          <button className="btn btn-primary"><Icon name="mail" size={14} />I&apos;ve emailed the proof</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 /** Task detail: plan info, confidence, slip reason, due-date history, comments. */
 export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Row; month: string; canEdit: boolean; closeHref?: string; dueChanges?: { oldDate: Date | null; newDate: Date | null; changedAt: Date; changedBy: string | null }[] }) {
   const t = r.task;
@@ -203,7 +238,8 @@ export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Ro
       {(needsReason || t.slipReason) && (
         <div id="reason" className={`rounded-lg border p-3 space-y-2 ${needsReason && !t.slipReason ? "border-crit bg-crit/5" : "border-line bg-plane/60"}`}>
           <div className="label">{needsReason && !t.slipReason ? "Reason needed" : "Slip reason"}</div>
-          {canEdit ? <SlipReasonForm r={r} /> : <p className="text-sm">{t.slipReason ? slipLabel(t.slipReason) : "—"}{t.slipNote ? `: ${t.slipNote}` : ""}</p>}
+          {t.reasonReviews[0] && <ReasonStatus rv={t.reasonReviews[0]} canEdit={canEdit} />}
+          {canEdit && t.reasonReviews[0]?.status !== "PROOF_REQUESTED" ? <SlipReasonForm r={r} /> : !canEdit && <p className="text-sm">{t.slipReason ? slipLabel(t.slipReason) : "—"}{t.slipNote ? `: ${t.slipNote}` : ""}</p>}
         </div>
       )}
 
@@ -236,6 +272,13 @@ export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Ro
           ))}
           {!t.comments.length && <div className="text-sm text-ink-3">No comments yet.</div>}
         </div>
+        <p className="mt-1.5 text-[11px] text-ink-3">Comments added here are also posted on the Zoho task.</p>
+      </div>
+      <div>
+        <div className="label mb-2">In Zoho</div>
+        <Suspense fallback={<p className="text-xs text-ink-3">Loading comments from Zoho…</p>}>
+          <ZohoComments projectId={t.projectId} taskId={t.id} />
+        </Suspense>
       </div>
       {canEdit && (
         <form action={addComment} className="space-y-2 rounded-lg border border-line bg-plane/60 p-3">

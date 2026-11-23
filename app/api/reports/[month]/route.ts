@@ -15,7 +15,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ mont
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="growthmak-delivery-report-${month}.pdf"`,
+      // ?view=1 opens it in the browser; otherwise it downloads
+      "Content-Disposition": `${req.nextUrl.searchParams.get("view") ? "inline" : "attachment"}; filename="growthmak-delivery-report-${month}.pdf"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }

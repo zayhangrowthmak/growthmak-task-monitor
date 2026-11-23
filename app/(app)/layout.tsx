@@ -10,7 +10,10 @@ import { Logo } from "@/components/Logo";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const admin = user.role === "ADMIN";
-  const pendingApprovals = admin ? await prisma.zohoChange.count({ where: { status: { in: ["PENDING", "FAILED"] } } }) : 0;
+  const pendingApprovals = admin
+    ? (await prisma.zohoChange.count({ where: { auto: false, status: { in: ["PENDING", "FAILED"] } } })) +
+      (await prisma.reasonReview.count({ where: { status: { in: ["PENDING", "PROOF_SENT"] } } }))
+    : 0;
   const nav: NavItem[] = admin
     ? [
         { href: "/overview", label: "Overview" },

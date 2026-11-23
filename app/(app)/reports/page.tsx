@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
+import { Icon } from "@/components/Icon";
 import { prisma, getState } from "@/lib/db";
 import { availableMonths } from "@/lib/metrics";
 import { addMonths, currentMonth, monthLabel, fmtDateTime } from "@/lib/time";
@@ -50,7 +51,8 @@ export default async function Reports() {
                 <div className="flex flex-wrap gap-2">
                   <form action={regenerateReport}><input type="hidden" name="month" value={m} /><button className="btn" title="Rebuild with the latest reasons, reviews and summary">Rebuild</button></form>
                   <form action={postReportNow}><input type="hidden" name="month" value={m} /><button className="btn">Post to Cliq</button></form>
-                  <a className="btn btn-primary" href={`/api/reports/${m}`}>Download PDF</a>
+                  <a className="btn btn-primary" href={`/api/reports/${m}?view=1`} target="_blank" rel="noopener">View report<Icon name="external" size={14} /></a>
+                  <a className="btn" href={`/api/reports/${m}`}>Download PDF</a>
                 </div>
               </div>
               {summaries.has(m) && (

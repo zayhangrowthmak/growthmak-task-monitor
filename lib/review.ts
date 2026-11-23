@@ -86,7 +86,7 @@ export async function applyChange(admin: User, changeId: string): Promise<{ ok: 
     else if (ch.kind === "SET_STATUS") {
       await setStatus(ch.projectId, ch.taskId!, p.status);
       if (p.clearDue) await clearDueDate(ch.projectId, ch.taskId!).catch(() => null);
-      if (p.comment) await addComment(ch.projectId, ch.taskId!, `Closed from the Task Monitor review: ${p.comment}`);
+      if (p.comment) await addComment(ch.projectId, ch.taskId!, `Closed from the Task Monitor review: ${p.comment}`).catch(() => null);
     } else if (ch.kind === "CREATE_TASK") await createTask(ch.projectId, { name: p.name, due: new Date(p.due), ownerZpuid: p.ownerZpuid });
     await prisma.zohoChange.update({ where: { id: ch.id }, data: { status: "APPLIED", decidedById: admin.id, decidedAt: new Date(), error: null } });
     await audit(admin, "zoho.apply", "ZohoChange", ch.id, { summary: ch.summary });

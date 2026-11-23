@@ -38,6 +38,10 @@ export async function tick(now = Date.now()) {
     }
     const sent = await flushOutbox((m) => generateReport(m));
     if (sent) console.log(`[cliq] sent ${sent}`);
+    // Two-way sync: comments, reasons and verdicts written in the dashboard go onto the Zoho task
+    const { flushZohoComments } = await import("../reasons");
+    const posted = await flushZohoComments();
+    if (posted) console.log(`[zoho] posted ${posted} comment(s)`);
   } catch (e) {
     console.error("[jobs] tick failed:", e);
   }

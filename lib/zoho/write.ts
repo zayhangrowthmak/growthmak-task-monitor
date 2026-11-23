@@ -1,7 +1,7 @@
 // Writes to Zoho Projects. Only ever called for a ZohoChange a manager approved.
 import { config } from "../config";
 import { prisma } from "../db";
-import { resolvePortalId, zsend } from "./client";
+import { listFrom, resolvePortalId, zget, zsend } from "./client";
 
 const ymd = (d: Date) => new Date(d.getTime() + 330 * 60_000).toISOString().slice(0, 10);
 
@@ -56,9 +56,37 @@ export async function setStatus(projectId: string, taskId: string, statusName: s
   await patchTask(projectId, taskId, [{ status: { id } }, { status_id: id }, { custom_status: id }]);
 }
 
+/** Post a comment on a Zoho task. Throws on failure so the caller (or the outbox) can retry. */
 export async function addComment(projectId: string, taskId: string, text: string) {
   const portal = await resolvePortalId();
-  await zsend("POST", `/api/v3/portal/${portal}/projects/${projectId}/tasks/${taskId}/comments`, { comment: text }).catch(() => null);
+  const path = `/api/v3/portal/${portal}/projects/${projectId}/tasks/${taskId}/comments`;
+  let last: unknown;
+  for (const body of [{ comment: text }, { content: text }]) {
+    try {
+      return await zsend("POST", path, body);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last;
+}
+
+export type ZohoComment = { id: string; text: string; author: string; at: Date | null };
+const stripHtml = (h: string) => h.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').trim();
+
+/** Comments on a Zoho task, newest first (Zoho → dashboard). */
+export async function listComments(projectId: string, taskId: string): Promise<ZohoComment[]> {
+  const portal = await resolvePortalId();
+  const json = await zget(`/api/v3/portal/${portal}/projects/${projectId}/tasks/${taskId}/comments`, { page: 1, per_page: 30 });
+  return listFrom(json, "comments")
+    .map((c: any) => ({
+      id: String(c.id ?? c.id_string ?? ""),
+      text: stripHtml(String(c.comment ?? c.content ?? c.text ?? "")),
+      author: String(c.created_by?.name ?? c.added_by?.name ?? c.owner?.name ?? c.created_person ?? "Zoho"),
+      at: c.created_time ? new Date(c.created_time) : c.created_time_long ? new Date(Number(c.created_time_long)) : null,
+    }))
+    .filter((c: ZohoComment) => c.text)
+    .sort((a: ZohoComment, b: ZohoComment) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0));
 }
 
 export async function createTask(projectId: string, p: { name: string; due: Date; ownerZpuid?: string | null }) {

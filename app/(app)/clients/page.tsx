@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 import { Meter, ratioTone, onTimeTone } from "@/components/Viz";
 import { peopleLabel } from "@/lib/people";
 import { requireAdmin } from "@/lib/auth";
@@ -44,7 +45,10 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
         <section key={c.name} id={encodeURIComponent(c.name)} className="mt-6 card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2"><h2 className="text-lg font-semibold">{c.name}</h2><ClientTypeBadge type={c.type} /></div>
-            <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}`} className="btn">Export client PDF</a>
+            <div className="flex flex-wrap gap-2">
+              <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}&view=1`} target="_blank" rel="noopener" className="btn">View client PDF<Icon name="external" size={14} /></a>
+              <a href={`/api/reports/${month}/client?name=${encodeURIComponent(c.name)}`} className="btn">Download</a>
+            </div>
           </div>
           <div className="mt-3 grid gap-4 md:grid-cols-4 text-sm">
             <div><div className="label">Delivered</div><div className="mt-1 text-xl font-semibold"><PctText p={c.metrics.delivery} /></div><div className="mt-2"><Meter value={c.metrics.delivery.value} tone={c.metrics.delivery.small ? "none" : ratioTone(c.metrics.delivery.value)} label={`Delivered ${c.metrics.delivery.value ?? 0}%`} /></div></div>
