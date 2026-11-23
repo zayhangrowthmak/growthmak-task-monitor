@@ -221,7 +221,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           <WorkloadStrip weeks={wl.weeks} rows={wl.rows} green={settings.workloadGreen} amber={settings.workloadAmber} month={month} />
 
           <SectionTitle icon="briefcase" right={<Link href={`/clients?month=${month}`} className="text-xs text-brand hover:underline">Clients page <Icon name="arrowRight" size={14} className="inline -mt-0.5" /></Link>}>By client</SectionTitle>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 min-[1860px]:grid-cols-4">
             {clients.map((c) => (
               <Link key={c.name} href={`/clients?month=${month}#${encodeURIComponent(c.name)}`} className="card lift p-4 hover:border-brand">
                 <div className="flex items-center justify-between gap-2">

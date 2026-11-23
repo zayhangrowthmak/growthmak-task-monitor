@@ -7,7 +7,7 @@ import { Icon, type IconName } from "./Icon";
 export type NavItem = { href: string; label: string; icon: IconName; count?: number };
 
 /** Top navigation. Runs in the browser so the active tab follows every page change.
- *  Below 1536px it sits on its own row and scrolls sideways instead of squeezing the header. */
+ *  Below 1860px it sits on its own row and scrolls sideways instead of squeezing the header. */
 export function MainNav({ items }: { items: NavItem[] }) {
   const path = usePathname();
   return (

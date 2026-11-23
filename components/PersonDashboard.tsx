@@ -112,7 +112,7 @@ export async function PersonDashboard({ person, viewer, sp, basePath }: { person
         <div className="mt-4 rounded-xl border border-crit bg-crit/5 p-4">
           <div className="font-semibold text-sm">{needReason.length} planned deliverable{needReason.length === 1 ? " needs" : "s need"} a reason</div>
           <p className="text-xs text-ink-2 mt-0.5">They went overdue, moved out of the month, or are blocked. Pick a reason so the team knows what&apos;s holding them up.</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {needReason.slice(0, 6).map((r) => (
               <div key={r.task.id} className="card p-3">
                 <div className="flex items-start justify-between gap-2 mb-2">

@@ -67,7 +67,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--brand)); w
 /* Wide content (tables, boards) scrolls inside its own box, never the page */
 .scroll-x { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
 /* Edge fade on sideways scrollers, so a cut-off item reads as "more this way" */
-@media (max-width: 1535px) { .fade-x { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); } }
+@media (max-width: 1859px) { .fade-x { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); } }
 @media (max-width: 767px) { .fade-x-sm { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); } }
 .no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
 .card { @apply bg-surface rounded-xl border border-line; }

@@ -142,7 +142,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div>
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2.5"><span className="chip chip-teal" aria-hidden><Icon name="users" size={15} /></span>People & access</h2>
           <div className="card overflow-x-auto">

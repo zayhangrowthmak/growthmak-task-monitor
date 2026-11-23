@@ -91,7 +91,7 @@ export default async function Approvals() {
       <h2 className="mt-6 text-base font-semibold flex items-center gap-2.5"><span className="chip chip-warn" aria-hidden><Icon name="message" size={15} /></span>Delay reasons to review <span className="num font-normal text-ink-3">· {toReview.length}</span></h2>
       <p className="mt-0.5 text-sm text-ink-2">Agree if it holds up. Ask for proof when it doesn&apos;t: they&apos;ll be tagged in Cliq and asked to email you, with the CC list from Settings copied.</p>
       {toReview.length ? (
-        <ul className="mt-3 grid gap-3 xl:grid-cols-2">{toReview.map((r) => <ReasonCard key={r.id} r={r} />)}</ul>
+        <ul className="mt-3 grid gap-3 xl:grid-cols-2 min-[1860px]:grid-cols-3">{toReview.map((r) => <ReasonCard key={r.id} r={r} />)}</ul>
       ) : (
         <div className="mt-3"><Empty>No delay reasons waiting.</Empty></div>
       )}
