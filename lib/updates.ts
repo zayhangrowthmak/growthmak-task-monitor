@@ -1,29 +1,71 @@
-// Task updates: Zoho comment threads for the tasks the managers follow, and replies/follow-ups
-// from the dashboard that are posted back onto the Zoho task (the team only ever works in Zoho).
+// Task updates: the short list of tasks a manager should look at now — recently commented on,
+// waiting in Review / QA, blocked, or newly created — and replies/follow-ups posted back onto the
+// Zoho task (the team only ever works in Zoho).
 //
-// API budget: only a narrow set of tasks is followed (this month's open planned deliverables plus
-// open overdue tasks). Their comments are re-read a few at a time in rotation, oldest-checked first,
-// so the dashboard never spends more than a handful of Zoho calls per scheduler tick.
-import type { User } from "@prisma/client";
+// Recency rule: nothing older than 35 days shows up. A task is on the list when, within the window,
+//   · someone commented on it in Zoho, or
+//   · it sits in Review / QA or Blocked and something happened on it (status move, update, comment), or
+//   · it was created in Zoho in the last 7 days.
+// API budget: comments are re-read only for tasks that could qualify, a few per scheduler tick, and
+// tasks Zoho reports as changed since we last read them go first.
+import type { User, StatusBucket } from "@prisma/client";
 import { prisma, getState, setState } from "./db";
 import { currentMonth } from "./time";
 import { addComment, listComments } from "./zoho/write";
 import { enqueue, mention } from "./cliq";
 import { audit } from "./audit";
 
+const DAY = 86_400_000;
+export const MAX_DAYS = 35;
+export const NEW_TASK_DAYS = 7;
 const OPEN = { isClosed: false, deleted: false, bucket: { notIn: ["COMPLETED", "BACKLOG", "CLOSED"] as any } };
+const WATCH: StatusBucket[] = ["REVIEW", "BLOCKED"];
 
-/** The followed tasks: open deliverables in this month's plan, and open tasks past their due date. */
-export async function followedTasks(now = new Date()) {
-  const plan = await prisma.monthPlan.findUnique({ where: { month: currentMonth(now) }, include: { items: { where: { removedAt: null }, select: { taskId: true } } } });
-  const planned = new Set(plan?.items.map((i) => i.taskId) ?? []);
-  const rows = await prisma.task.findMany({
-    where: { ...OPEN, project: { active: true }, OR: [{ id: { in: [...planned] } }, { dueDate: { lt: now } }] },
-    select: { id: true },
+/** Tasks that could be on the list: open, and touched in the last 35 days (or in Review / Blocked). */
+export async function candidateTasks(now = new Date()) {
+  const since = new Date(now.getTime() - MAX_DAYS * DAY);
+  return prisma.task.findMany({
+    where: {
+      ...OPEN,
+      project: { active: true },
+      OR: [{ lastCommentAt: { gte: since } }, { updatedAtZoho: { gte: since } }, { createdAtZoho: { gte: since } }, { bucket: { in: WATCH } }],
+    },
+    select: { id: true, bucket: true, updatedAtZoho: true, createdAtZoho: true, commentsCheckedAt: true, lastCommentAt: true },
   });
-  return { ids: rows.map((r) => r.id), planned };
 }
-export const followedTaskIds = async (now = new Date()) => (await followedTasks(now)).ids;
+
+export type FeedWhy = "comment" | "review" | "blocked" | "new";
+export type FeedItem = { taskId: string; activityAt: Date; why: FeedWhy[]; statusSince: Date | null };
+
+/** The list itself, newest activity first. `days` narrows the window (never beyond 35). */
+export async function feed(now = new Date(), days = MAX_DAYS): Promise<FeedItem[]> {
+  const win = Math.min(MAX_DAYS, Math.max(1, days));
+  const since = new Date(now.getTime() - win * DAY);
+  const newSince = new Date(now.getTime() - Math.min(win, NEW_TASK_DAYS) * DAY);
+  const cands = await candidateTasks(now);
+  const moves = await prisma.statusChange.findMany({
+    where: { taskId: { in: cands.map((c) => c.id) }, to: { in: WATCH } },
+    orderBy: { at: "desc" },
+    select: { taskId: true, to: true, at: true },
+  });
+  const movedAt = new Map<string, Date>();
+  for (const m of moves) if (!movedAt.has(m.taskId)) movedAt.set(m.taskId, m.at);
+  const out: FeedItem[] = [];
+  for (const t of cands) {
+    const statusSince = WATCH.includes(t.bucket) ? movedAt.get(t.id) ?? null : null;
+    const activityAt = new Date(Math.max(...[t.lastCommentAt, t.updatedAtZoho, t.createdAtZoho, statusSince].map((d) => d?.getTime() ?? 0)));
+    if (activityAt < since) continue;
+    const why: FeedWhy[] = [];
+    if (t.lastCommentAt && t.lastCommentAt >= since) why.push("comment");
+    if (t.bucket === "REVIEW") why.push("review");
+    if (t.bucket === "BLOCKED") why.push("blocked");
+    if (t.createdAtZoho && t.createdAtZoho >= newSince) why.push("new");
+    if (!why.length) continue;
+    out.push({ taskId: t.id, activityAt, why, statusSince });
+  }
+  return out.sort((a, b) => b.activityAt.getTime() - a.activityAt.getTime());
+}
+export const feedTaskIds = async (now = new Date()) => (await feed(now)).map((f) => f.taskId);
 
 /** Read one task's comments from Zoho into the cache. */
 export async function refreshComments(taskId: string) {
@@ -41,16 +83,20 @@ export async function refreshComments(taskId: string) {
   return items.length;
 }
 
-/** Scheduler: refresh the followed tasks that were checked longest ago, a few per tick. */
-export async function refreshDueComments(limit = 10) {
-  const ids = await followedTaskIds();
-  if (!ids.length) return 0;
-  const due = await prisma.task.findMany({
-    where: { id: { in: ids }, OR: [{ commentsCheckedAt: null }, { commentsCheckedAt: { lt: new Date(Date.now() - 20 * 60_000) } }] },
-    orderBy: [{ commentsCheckedAt: { sort: "asc", nulls: "first" } }],
-    select: { id: true },
-    take: limit,
-  });
+/**
+ * Scheduler: re-read Zoho comments on a few candidate tasks per tick. Order: never read; changed in
+ * Zoho since we last read it; in Review / Blocked; then whoever was read longest ago. A task is not
+ * re-read within 15 minutes.
+ */
+export async function refreshDueComments(limit = 10, now = new Date()) {
+  const cands = await candidateTasks(now);
+  const fresh = new Date(now.getTime() - 15 * 60_000);
+  const rank = (t: (typeof cands)[number]) =>
+    !t.commentsCheckedAt ? 0 : t.updatedAtZoho && t.updatedAtZoho > t.commentsCheckedAt ? 1 : WATCH.includes(t.bucket) ? 2 : 3;
+  const due = cands
+    .filter((t) => !t.commentsCheckedAt || t.commentsCheckedAt < fresh)
+    .sort((a, b) => rank(a) - rank(b) || (a.commentsCheckedAt?.getTime() ?? 0) - (b.commentsCheckedAt?.getTime() ?? 0))
+    .slice(0, limit);
   let n = 0;
   for (const t of due) {
     try {
@@ -130,6 +176,7 @@ export async function markUpdatesSeen(userId: string) {
 export async function newUpdatesCount(userId: string) {
   const seen = await getState(seenKey(userId));
   const since = seen ? new Date(seen) : new Date(Date.now() - 3 * 86_400_000);
-  const ids = await followedTaskIds();
-  return prisma.task.count({ where: { id: { in: ids }, lastCommentAt: { gt: since } } });
+  const ids = await feedTaskIds();
+  // New comments from the team (not the managers' own replies) on tasks in the list
+  return prisma.task.count({ where: { id: { in: ids }, zohoComments: { some: { at: { gt: since }, fromDashboard: false } } } });
 }

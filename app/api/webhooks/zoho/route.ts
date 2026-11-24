@@ -29,6 +29,8 @@ async function handle(req: NextRequest) {
   const log = await prisma.syncLog.create({ data: { kind: "webhook", detail: `task ${taskId}` } });
   try {
     await syncOneTask(String(projectId), String(taskId));
+    // Keep Task updates current: read this task's comments too (one call)
+    await import("@/lib/updates").then((m) => m.refreshComments(String(taskId))).catch((e) => console.error("[webhook] comments", e));
     await prisma.syncLog.update({ where: { id: log.id }, data: { ok: true, finishedAt: new Date() } });
     return NextResponse.json({ ok: true });
   } catch (e: any) {

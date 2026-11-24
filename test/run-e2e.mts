@@ -376,13 +376,30 @@ async function main() {
   });
 
   console.log("\nTask updates: Zoho comment threads, replies, follow-ups");
-  await check("the feed follows open planned tasks and overdue tasks only", async () => {
-    const { followedTaskIds } = await import("../lib/updates");
-    const ids = await followedTaskIds();
-    assert.ok(ids.includes("103"), "overdue planned task followed");
-    assert.ok(!ids.includes("105"), "done task not followed");
-    const closed = await prisma.task.findMany({ where: { id: { in: ids }, isClosed: true } });
-    assert.equal(closed.length, 0);
+  await check("Task updates lists only recent activity: comments, Review / QA, Blocked, new tasks — never past 35 days", async () => {
+    const { feed } = await import("../lib/updates");
+    const now = new Date();
+    const old = new Date(now.getTime() - 40 * 86_400_000);
+    // A quiet overdue task with nothing for 40 days is not on the list
+    await prisma.task.update({ where: { id: "103" }, data: { updatedAtZoho: old, createdAtZoho: old, lastCommentAt: null, bucket: "IN_PROGRESS" } });
+    assert.ok(!(await feed(now)).some((f) => f.taskId === "103"), "old quiet task left out");
+    // In Review / QA but untouched for 40 days: still left out
+    await prisma.task.update({ where: { id: "103" }, data: { bucket: "REVIEW" } });
+    assert.ok(!(await feed(now)).some((f) => f.taskId === "103"), "stale review task left out");
+    // Moved to Review / QA two days ago: on the list
+    await prisma.statusChange.create({ data: { taskId: "103", from: "IN_PROGRESS", to: "REVIEW", toName: "Review", at: new Date(now.getTime() - 2 * 86_400_000) } });
+    let it = (await feed(now)).find((f) => f.taskId === "103");
+    assert.deepEqual(it?.why, ["review"]);
+    // A comment 3 days ago adds it as commented; a 7-day window keeps it, a 1-day window drops it
+    await prisma.task.update({ where: { id: "103" }, data: { lastCommentAt: new Date(now.getTime() - 3 * 86_400_000), bucket: "IN_PROGRESS" } });
+    it = (await feed(now, 7)).find((f) => f.taskId === "103");
+    assert.deepEqual(it?.why, ["comment"]);
+    assert.ok(!(await feed(now, 1)).some((f) => f.taskId === "103"));
+    // Closed tasks never show
+    assert.ok(!(await feed(now)).some((f) => f.taskId === "105"));
+    // A task created yesterday shows as new
+    await prisma.task.update({ where: { id: "104" }, data: { createdAtZoho: new Date(now.getTime() - 86_400_000) } });
+    assert.ok((await feed(now)).find((f) => f.taskId === "104")?.why.includes("new"));
   });
   await check("Zoho comments are read into the dashboard, @mentions made readable", async () => {
     mock.taskComments.set("103", [
@@ -426,13 +443,13 @@ async function main() {
     assert.equal(await newUpdatesCount(admin.id), 0);
   });
   await check("the background refresh reads only a few tasks per run, oldest first", async () => {
-    const { refreshDueComments, followedTaskIds } = await import("../lib/updates");
-    const ids = await followedTaskIds();
+    const { refreshDueComments, candidateTasks } = await import("../lib/updates");
+    const ids = (await candidateTasks()).map((t) => t.id);
     await prisma.task.updateMany({ where: { id: { in: ids } }, data: { commentsCheckedAt: null } });
     assert.equal(await refreshDueComments(1), 1);
     assert.equal(await prisma.task.count({ where: { id: { in: ids }, commentsCheckedAt: null } }), ids.length - 1);
     await refreshDueComments(50);
-    assert.equal(await refreshDueComments(50), 0, "nothing is re-read within 20 minutes");
+    assert.equal(await refreshDueComments(50), 0, "nothing is re-read within 15 minutes");
   });
   await check("documents, subtasks and the activity log are read from Zoho", async () => {
     const { listAttachments, listSubtasks, listActivities } = await import("../lib/zoho/write");
