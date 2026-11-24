@@ -1,14 +1,13 @@
 import Link from "next/link";
 import type { Row } from "@/lib/metrics";
-import { BUCKETS, BUCKET_COLOR, REASONS, SLIP_REASONS, reasonLabel, slipLabel, bucketLabel } from "@/lib/status";
+import { BUCKETS, BUCKET_COLOR, reasonLabel, bucketLabel } from "@/lib/status";
 import { fmtDate, fmtDateTime } from "@/lib/time";
-import { StatePill, ConfPill } from "./ui";
-import { addComment, setConfidence, setSlipReason, markProofSentAction } from "@/app/actions";
+import { StatePill } from "./ui";
 import { Suspense } from "react";
-import { ZohoComments } from "./ZohoComments";
-import { VERDICT_LABEL } from "@/lib/reasons";
+import { ZohoComments, ZohoDocuments, ZohoSubtasks, ZohoActivity } from "./ZohoComments";
+import { UpdateForm } from "./UpdateForm";
 import { peopleLabel } from "@/lib/people";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 const sourceLabel: Record<string, string> = { DUE_DATE: "Planned", RECURRING: "Recurring", KEPT: "Kept from earlier", PROMOTED: "Promoted", UNPLANNED: "Unplanned", VIRTUAL: "Due this month" };
 
@@ -44,15 +43,14 @@ export function TaskCard({ r, href }: { r: Row; href: string }) {
       <div className="mt-2">
         <DueLine r={r} />
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <ConfPill value={t.userConfidence} />
-        {!r.done && t.completionPct > 0 && <span className="text-[10px] text-ink-3 num">{t.completionPct}% done</span>}
-      </div>
-      {t.slipReason && (
-        <div className="mt-2 border-t border-line pt-2 text-[11px] text-ink-2 line-clamp-2">
-          ↳ <b>{slipLabel(t.slipReason)}</b>
-          {t.slipNote ? `: ${t.slipNote}` : ""}
+      {!r.done && t.completionPct > 0 && (
+        <div className="mt-2 flex items-center gap-2">
+          <div className="h-1 flex-1 overflow-hidden rounded-full bg-line"><div className="h-full rounded-full bg-brand" style={{ width: `${t.completionPct}%` }} /></div>
+          <span className="text-[10px] text-ink-3 num">{t.completionPct}%</span>
         </div>
+      )}
+      {t.lastCommentAt && (
+        <div className="mt-2 flex items-center gap-1 border-t border-line pt-2 text-[11px] text-ink-3"><Icon name="message" size={11} />Last comment {fmtDate(t.lastCommentAt)}</div>
       )}
     </Link>
   );
@@ -96,11 +94,10 @@ export function TaskList({ rows, hrefFor, showAssignee }: { rows: Row[]; hrefFor
             <th>Client</th>
             {showAssignee && <th>Owner</th>}
             <th>State</th>
-            <th>Conf.</th>
             <th>Zoho task</th>
             <th>Planned due</th>
             <th>Done on</th>
-            <th>Reason / note</th>
+            <th>Last comment</th>
           </tr>
         </thead>
         <tbody>
@@ -116,7 +113,6 @@ export function TaskList({ rows, hrefFor, showAssignee }: { rows: Row[]; hrefFor
                 <td className="whitespace-nowrap">{r.client}</td>
                 {showAssignee && <td className="whitespace-nowrap">{peopleLabel(t)}</td>}
                 <td><StatePill state={r.state} /></td>
-                <td className="num">{t.userConfidence ?? "—"}</td>
                 <td className="whitespace-nowrap">
                   {t.url ? <a href={t.url} target="_blank" rel="noreferrer" className="num inline-flex items-center gap-1 whitespace-nowrap text-xs text-brand hover:underline">{t.key ?? "Open"}<Icon name="external" size={12} /></a> : <span className="font-mono text-xs">{t.key}</span>}
                 </td>
@@ -125,13 +121,13 @@ export function TaskList({ rows, hrefFor, showAssignee }: { rows: Row[]; hrefFor
                   {r.dueChanged && <div className="text-[11px] text-warnText">now {fmtDate(t.dueDate)}</div>}
                 </td>
                 <td className="whitespace-nowrap num">{r.doneAt ? fmtDate(r.doneAt) : r.done ? "done" : "—"}</td>
-                <td className="max-w-[260px] text-xs text-ink-2">{t.slipReason ? <><b>{slipLabel(t.slipReason)}</b>{t.slipNote ? `: ${t.slipNote}` : ""}</> : t.comments[0] ? t.comments[0].text : <span className="text-ink-3">—</span>}</td>
+                <td className="whitespace-nowrap num text-xs text-ink-2">{t.lastCommentAt ? fmtDate(t.lastCommentAt) : <span className="text-ink-3">—</span>}</td>
               </tr>
             );
           })}
           {!rows.length && (
             <tr>
-              <td colSpan={9} className="text-center text-ink-3 py-8">Nothing here.</td>
+              <td colSpan={8} className="text-center text-ink-3 py-8">Nothing here.</td>
             </tr>
           )}
         </tbody>
@@ -140,83 +136,29 @@ export function TaskList({ rows, hrefFor, showAssignee }: { rows: Row[]; hrefFor
   );
 }
 
-/** Confidence (1–3) for the assignee. */
-export function ConfidenceForm({ taskId, value }: { taskId: string; value: number | null }) {
-  return (
-    <form action={setConfidence} className="flex items-center gap-2">
-      <input type="hidden" name="taskId" value={taskId} />
-      <select name="confidence" defaultValue={value ?? ""} aria-label="Confidence">
-        <option value="">Not set</option>
-        <option value="3">3 · On Track</option>
-        <option value="2">2 · Watch</option>
-        <option value="1">1 · At Risk</option>
-      </select>
-      <button className="btn">Save</button>
-    </form>
-  );
-}
-
-export function SlipReasonForm({ r }: { r: Row }) {
-  return (
-    <form action={setSlipReason} className="space-y-2">
-      <input type="hidden" name="taskId" value={r.task.id} />
-      <select name="reason" required defaultValue={r.task.slipReason ?? ""} className="w-full">
-        <option value="" disabled>Why did it slip?</option>
-        {SLIP_REASONS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-      </select>
-      <input name="note" defaultValue={r.task.slipNote ?? ""} placeholder="Note (required for Other)" className="w-full" maxLength={1000} />
-      <button className="btn btn-primary">Save reason</button>
-    </form>
-  );
-}
-
-type Rv = Row["task"]["reasonReviews"][number];
-const VERDICT_STYLE: Record<string, string> = {
-  PENDING: "bg-plane text-ink-2",
-  PROOF_SENT: "bg-brand-soft text-brand-dark",
-  PROOF_REQUESTED: "bg-warn/20 text-warnText",
-  AGREED: "bg-good/10 text-goodText",
-  DISAGREED: "bg-crit/10 text-crit",
-};
-
-/** Where the manager's review of this reason stands; asks for proof when needed. */
-export function ReasonStatus({ rv, canEdit }: { rv: Rv; canEdit: boolean }) {
-  return (
-    <div className="space-y-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${VERDICT_STYLE[rv.status]}`}>{VERDICT_LABEL[rv.status]}</span>
-        <span className="text-xs text-ink-3">{slipLabel(rv.reason)} · given {fmtDate(rv.submittedAt)}</span>
-      </div>
-      {rv.managerNote && (
-        <p className="text-ink-2"><b className="font-medium text-ink">{rv.decidedBy?.name ?? "Manager"}:</b> {rv.managerNote}</p>
-      )}
-      {rv.status === "PROOF_REQUESTED" && canEdit && (
-        <form action={markProofSentAction} className="space-y-2 rounded-lg border border-warn bg-warn/10 p-3">
-          <input type="hidden" name="reasonId" value={rv.id} />
-          <p className="text-xs text-ink-2">Send an official email to {rv.decidedBy?.email ?? "your manager"} with the CC list copied, then confirm here.</p>
-          <input name="proofNote" placeholder="Optional: what you sent (e.g. client email of 12 Nov)" className="w-full" maxLength={500} />
-          <button className="btn btn-primary"><Icon name="mail" size={14} />I&apos;ve emailed the proof</button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-/** Task detail: plan info, confidence, slip reason, due-date history, comments. */
-export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Row; month: string; canEdit: boolean; closeHref?: string; dueChanges?: { oldDate: Date | null; newDate: Date | null; changedAt: Date; changedBy: string | null }[] }) {
+/** Task detail, read-only: what the dashboard knows plus what lives on the Zoho task. Managers can reply or follow up. */
+export function TaskDetail({ r, closeHref, dueChanges }: { r: Row; month?: string; canEdit?: boolean; closeHref?: string; dueChanges?: { oldDate: Date | null; newDate: Date | null; changedAt: Date; changedBy: string | null }[] }) {
   const t = r.task;
-  const needsReason = canEdit && (r.slip || r.waitingClient || r.blockedInternal) && !r.done;
+  const panel = (icon: IconName, title: string, body: React.ReactNode, loading: string) => (
+    <section>
+      <h4 className="label mb-2 flex items-center gap-1.5"><Icon name={icon} size={13} />{title}</h4>
+      <Suspense fallback={<p className="animate-pulse text-xs text-ink-3">{loading}</p>}>{body}</Suspense>
+    </section>
+  );
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-mono text-ink-3">{t.key} · {t.project.name}</div>
           <h3 className="text-lg font-semibold leading-snug mt-0.5">{t.name}</h3>
         </div>
-        {closeHref && <Link href={closeHref} scroll={false} className="btn btn-icon" aria-label="Close"><Icon name="x" /></Link>}
+        {closeHref && <Link href={closeHref} scroll={false} className="btn btn-icon shrink-0" aria-label="Close"><Icon name="x" /></Link>}
       </div>
-      <div className="flex flex-wrap gap-2"><StatePill state={r.state} /><ConfPill value={t.userConfidence} /></div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatePill state={r.state} />
+        {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="btn ml-auto">Open in Zoho Projects<Icon name="external" size={14} /></a>}
+      </div>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
         <dt className="text-ink-2">Client</dt><dd>{r.client}</dd>
         <dt className="text-ink-2">Assigned to</dt><dd>{t.assignees.filter((a) => a.role !== "OWNER").map((a) => a.user.name).join(", ") || "—"}</dd>
         <dt className="text-ink-2">Owner (Zoho)</dt><dd>{t.assignees.filter((a) => a.role !== "ASSIGNED").map((a) => a.user.name).join(", ") || "—"}</dd>
@@ -227,71 +169,43 @@ export function TaskDetail({ r, month, canEdit, closeHref, dueChanges }: { r: Ro
         <dt className="text-ink-2">Current due</dt><dd className="num">{fmtDate(t.dueDate)}{r.dueChanged && <span className="text-warnText"> (changed)</span>}</dd>
         <dt className="text-ink-2">Done on</dt><dd className="num">{r.doneAt ? fmtDate(r.doneAt) : r.done ? "done (time unknown)" : `${t.completionPct}% done`}</dd>
       </dl>
-      {t.url && <a href={t.url} target="_blank" rel="noreferrer" className="btn">Open in Zoho Projects<Icon name="external" size={14} /></a>}
-
-      {canEdit && !r.done && (
-        <div className="rounded-lg border border-line bg-plane/60 p-3 space-y-2">
-          <div className="label">Your confidence</div>
-          <ConfidenceForm taskId={t.id} value={t.userConfidence} />
-        </div>
-      )}
-      {(needsReason || t.slipReason) && (
-        <div id="reason" className={`rounded-lg border p-3 space-y-2 ${needsReason && !t.slipReason ? "border-crit bg-crit/5" : "border-line bg-plane/60"}`}>
-          <div className="label">{needsReason && !t.slipReason ? "Reason needed" : "Slip reason"}</div>
-          {t.reasonReviews[0] && <ReasonStatus rv={t.reasonReviews[0]} canEdit={canEdit} />}
-          {canEdit && t.reasonReviews[0]?.status !== "PROOF_REQUESTED" ? <SlipReasonForm r={r} /> : !canEdit && <p className="text-sm">{t.slipReason ? slipLabel(t.slipReason) : "—"}{t.slipNote ? `: ${t.slipNote}` : ""}</p>}
-        </div>
-      )}
 
       {t.description && (
-        <div>
-          <div className="label mb-1">Description</div>
-          <p className="text-sm text-ink-2 whitespace-pre-wrap">{t.description}</p>
-        </div>
+        <section>
+          <h4 className="label mb-1">Description</h4>
+          <p className="text-sm text-ink-2 whitespace-pre-wrap break-words">{t.description}</p>
+        </section>
       )}
+
+      {panel("message", "Comments in Zoho", <><ZohoComments taskId={t.id} /><div className="mt-3"><UpdateForm taskId={t.id} kind={r.done ? "reply" : r.slip || r.waitingClient || r.blockedInternal ? "follow_up" : "reply"} /></div></>, "Loading comments from Zoho…")}
+      {panel("layers", "Subtasks", <ZohoSubtasks projectId={t.projectId} taskId={t.id} />, "Loading subtasks…")}
+      {panel("file", "Documents", <ZohoDocuments projectId={t.projectId} taskId={t.id} zohoUrl={t.url} />, "Loading documents…")}
+      {panel("history", "Activity log", <ZohoActivity projectId={t.projectId} taskId={t.id} />, "Loading activity…")}
+
       {dueChanges && dueChanges.length > 0 && (
-        <div>
-          <div className="label mb-1">Due-date changes</div>
+        <section>
+          <h4 className="label mb-1 flex items-center gap-1.5"><Icon name="calendar" size={13} />Due-date changes</h4>
           <ul className="text-xs text-ink-2 space-y-1">
             {dueChanges.map((c, i) => <li key={i} className="num">{fmtDateTime(c.changedAt)}: {fmtDate(c.oldDate)} → {fmtDate(c.newDate)}{c.changedBy ? ` by ${c.changedBy}` : ""}</li>)}
           </ul>
-        </div>
+        </section>
       )}
 
-      <div>
-        <div className="label mb-2">Comments ({t.comments.length})</div>
-        <div className="space-y-2">
-          {t.comments.map((c) => (
-            <div key={c.id} className="rounded-lg border border-line bg-field p-2.5 text-sm">
-              <div className="flex justify-between text-[11px] text-ink-3">
-                <span><b className="text-ink-2">{c.author.name}</b> · {reasonLabel(c.reason)}</span>
-                <span>{fmtDateTime(c.createdAt)}</span>
+      {t.comments.length > 0 && (
+        <section>
+          <h4 className="label mb-2">Earlier notes in the dashboard ({t.comments.length})</h4>
+          <div className="space-y-2">
+            {t.comments.map((c) => (
+              <div key={c.id} className="rounded-lg border border-line bg-field p-2.5 text-sm">
+                <div className="flex justify-between text-[11px] text-ink-3">
+                  <span><b className="text-ink-2">{c.author.name}</b> · {reasonLabel(c.reason)}</span>
+                  <span>{fmtDateTime(c.createdAt)}</span>
+                </div>
+                <div className="mt-1 whitespace-pre-wrap">{c.text}</div>
               </div>
-              <div className="mt-1 whitespace-pre-wrap">{c.text}</div>
-            </div>
-          ))}
-          {!t.comments.length && <div className="text-sm text-ink-3">No comments yet.</div>}
-        </div>
-        <p className="mt-1.5 text-[11px] text-ink-3">Comments added here are also posted on the Zoho task.</p>
-      </div>
-      <div>
-        <div className="label mb-2">In Zoho</div>
-        <Suspense fallback={<p className="text-xs text-ink-3">Loading comments from Zoho…</p>}>
-          <ZohoComments projectId={t.projectId} taskId={t.id} />
-        </Suspense>
-      </div>
-      {canEdit && (
-        <form action={addComment} className="space-y-2 rounded-lg border border-line bg-plane/60 p-3">
-          <input type="hidden" name="taskId" value={t.id} />
-          <input type="hidden" name="month" value={month} />
-          <div className="label">Add a comment</div>
-          <select name="reason" required defaultValue="" className="w-full">
-            <option value="" disabled>Topic…</option>
-            {REASONS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-          </select>
-          <textarea name="text" required minLength={2} rows={3} placeholder="Update, blocker or plan" className="w-full" />
-          <button className="btn btn-primary">Save comment</button>
-        </form>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

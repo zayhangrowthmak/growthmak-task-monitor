@@ -11,19 +11,20 @@ const ERRORS: Record<string, string> = {
   token_exchange: "Zoho sign-in failed. Please try again.",
   no_email: "Zoho didn't share an email address for this account.",
   not_admin: "Only admins can connect the Zoho sync account.",
+  managers_only: "The Task Monitor is for Zayhan and Sandeep only. Please use Zoho Projects for your tasks.",
 };
 
 export default async function Login({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const u = await currentUser();
-  if (u) redirect(u.role === "ADMIN" ? "/overview" : "/me");
+  if (u) redirect("/overview");
   const sp = await searchParams;
-  const demoUsers = config.demoMode ? await prisma.user.findMany({ orderBy: [{ role: "asc" }, { name: "asc" }] }) : [];
+  const demoUsers = config.demoMode ? await prisma.user.findMany({ where: { role: "ADMIN" }, orderBy: { name: "asc" } }) : [];
   return (
     <div className="min-h-screen grid place-items-center p-6">
       <div className="card w-full max-w-sm p-7">
         <Logo height={40} />
         <div className="mt-4 text-lg font-semibold">Task Monitor</div>
-        <p className="mt-2 text-sm text-ink-2">Sign in with your Zoho account to see your tasks and progress.</p>
+        <p className="mt-2 text-sm text-ink-2">For the managers. Sign in with your Zoho account. The team works in Zoho Projects.</p>
         {sp.error && <div className="mt-4 rounded-lg bg-crit/10 p-3 text-sm text-crit">{ERRORS[sp.error] ?? "Sign-in failed."}</div>}
         {zohoConfigured() && <a href="/api/auth/login" className="btn btn-primary mt-5 w-full justify-center py-2">Sign in with Zoho</a>}
         {config.demoMode && (

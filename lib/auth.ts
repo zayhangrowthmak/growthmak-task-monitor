@@ -42,19 +42,18 @@ export async function currentUser(): Promise<User | null> {
   const p = await verifyToken<{ uid: string }>(token);
   if (!p?.uid) return null;
   const u = await prisma.user.findUnique({ where: { id: p.uid } });
-  return u?.active ? u : null;
+  if (!u?.active || u.role !== "ADMIN") return null;
+  // ADMIN_EMAILS is the single list of who may use the dashboard; removing someone there locks them out at once
+  if (!config.demoMode && !config.adminEmails.includes(u.email.toLowerCase())) return null;
+  return u;
 }
 
+/** Every page is for the managers only. */
 export async function requireUser(): Promise<User> {
   const u = await currentUser();
   if (!u) redirect("/login");
   return u;
 }
-
-export async function requireAdmin(): Promise<User> {
-  const u = await requireUser();
-  if (u.role !== "ADMIN") redirect("/me");
-  return u;
-}
+export const requireAdmin = requireUser;
 
 export const isAdmin = (u: User | null) => u?.role === "ADMIN";

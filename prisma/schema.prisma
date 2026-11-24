@@ -193,6 +193,9 @@ model Task {
   assignees       TaskAssignee[]
   comments        TaskComment[]
   reasonReviews   ReasonReview[]
+  zohoComments    ZohoComment[]
+  commentsCheckedAt DateTime? // last time this task's Zoho comments were read
+  lastCommentAt     DateTime? // newest Zoho comment we know of
   alerts          AlertLog[]
 
   @@index([projectId])
@@ -450,6 +453,22 @@ model ReasonReview {
 
   @@index([status])
   @@index([taskId])
+}
+
+/// Zoho comments on the tasks the managers follow (this month's plan + overdue), cached for the Task updates page
+model ZohoComment {
+  id         String   @id // Zoho comment id
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author     String
+  authorId   String? // Zoho user id, when given
+  text       String
+  raw        String? // as Zoho sent it (to learn its @mention format)
+  at         DateTime
+  fromDashboard Boolean @default(false)
+
+  @@index([taskId, at])
+  @@index([at])
 }
 
 model RecurringTemplate {

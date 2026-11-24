@@ -42,16 +42,16 @@ function dueText(r: Row, now: Date, workingDays: number[]): string {
 export async function alertText(r: Row, now: Date): Promise<string> {
   const s = await getSettings();
   const t = r.task;
-  const last = t.comments[0];
+  // The team works in Zoho: the latest Zoho comment is the latest update, and the link goes to the Zoho task
+  const last = await prisma.zohoComment.findFirst({ where: { taskId: t.id }, orderBy: { at: "desc" } }).catch(() => null);
   const lines = [
     `${TITLE[r.state]} ${r.client} - *${t.name}*`,
     `• Assignee: ${who(r)}`,
     `• Task: ${t.key ?? "—"}  |  Due: ${dueText(r, now, s.workingDays)}`,
-    `• Status: ${t.zohoStatus}  |  Confidence: ${confText(t.userConfidence)}`,
+    `• Status: ${t.zohoStatus}`,
   ];
-  if (t.slipReason) lines.push(`• Reason: ${slipLabel(t.slipReason)}${t.slipNote ? ` — ${t.slipNote}` : ""}`);
-  if (last) lines.push(`• Last update: ${fmtDate(last.createdAt)}, "${last.text.slice(0, 120)}"`);
-  lines.push("", `Open in Zoho: ${t.url ?? "—"}  |  Update reason/date: ${config.appUrl}/tasks/${t.id}`, await ccLine());
+  if (last) lines.push(`• Last comment: ${fmtDate(last.at)}, ${last.author}: "${last.text.replace(/\s+/g, " ").slice(0, 120)}"`);
+  lines.push("", `Update the task in Zoho: ${t.url ?? "—"}`, await ccLine());
   return lines.join("\n");
 }
 
@@ -246,9 +246,9 @@ export async function cliqScheduleTick(now = new Date()) {
   const workday = s.workingDays.includes(dow);
   if (date === 1 && h >= s.reportPostHour) {
     await once("monthly-report", now, () => postMonthlyReport(addMonths(currentMonth(now), -1)));
-    await once("old-task-review", now, () => postOldTaskReviews(now));
   }
-  if (s.checkinEnabled && dow === 1 && h >= 9) await once("checkin", now, () => postCheckins(now));
+  // Paused: the Monday confidence check-in and the 1st-of-month old-task review asked the team to act
+  // in the dashboard, which they no longer use (postCheckins / postOldTaskReviews are kept for later).
   if (s.digestEnabled && workday && h >= 9) await once("digest", now, () => postDigest(now));
 }
 

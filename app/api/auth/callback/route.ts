@@ -54,17 +54,16 @@ export async function GET(req: NextRequest) {
   const email = info.Email?.toLowerCase();
   if (!email) return fail("no_email");
 
+  // Only the managers listed in ADMIN_EMAILS can use the dashboard. The team works in Zoho Projects.
+  if (!config.adminEmails.includes(email)) return fail("managers_only");
   let user = await prisma.user.findUnique({ where: { email } });
-  const isAdmin = config.adminEmails.includes(email);
-  const domainOk = config.allowedEmailDomain ? email.endsWith(`@${config.allowedEmailDomain}`) : false;
-  if (!user && (isAdmin || domainOk)) {
+  if (!user) {
     user = await prisma.user.create({
-      data: { email, name: info.Display_Name || [info.First_Name, info.Last_Name].filter(Boolean).join(" ") || email, role: isAdmin ? "ADMIN" : "MEMBER" },
+      data: { email, name: info.Display_Name || [info.First_Name, info.Last_Name].filter(Boolean).join(" ") || email, role: "ADMIN" },
     });
   }
-  if (!user || !user.active) return fail("not_in_portal");
-  if (isAdmin && user.role !== "ADMIN") user = await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } });
+  if (user.role !== "ADMIN" || !user.active) user = await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN", active: true } });
 
   await setSession(user.id);
-  return NextResponse.redirect(`${config.appUrl}${user.role === "ADMIN" ? "/overview" : "/me"}`);
+  return NextResponse.redirect(`${config.appUrl}/overview`);
 }

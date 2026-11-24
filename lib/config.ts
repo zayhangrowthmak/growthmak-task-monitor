@@ -69,6 +69,8 @@ export const config = {
     syncIntervalMin: Number(process.env.SYNC_INTERVAL_MIN ?? 15),
     confidenceIntervalMin: Number(process.env.CONFIDENCE_INTERVAL_MIN ?? 30),
     cronSecret: process.env.CRON_SECRET ?? "",
+    // Task updates: how many followed tasks' Zoho comments are re-read every 5 minutes
+    commentsPerTick: Math.max(1, Math.min(40, Number(process.env.COMMENTS_PER_TICK ?? 12))),
   },
 
   // JSON map of exact Zoho status name → bucket, e.g. {"Waiting on client":"BLOCKED"}

@@ -9,7 +9,7 @@ import { addMonths, currentMonth, fmtDate, fmtDateTime, monthLabel, monthRange }
 import { REMOVE_REASONS, removeLabel } from "@/lib/status";
 import { MonthPicker } from "@/components/Pickers";
 import { StatePill, Empty } from "@/components/ui";
-import { lockPlanNow, promoteAction, removeFromPlanAction, restoreToPlanAction, requestRecurringTask } from "@/app/actions";
+import { lockPlanNow, promoteAction, removeFromPlanAction, restoreToPlanAction } from "@/app/actions";
 
 const SRC: Record<string, string> = { DUE_DATE: "Due date", RECURRING: "Recurring", KEPT: "Kept (review)", PROMOTED: "Promoted", VIRTUAL: "Due date" };
 
@@ -29,7 +29,6 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     t,
     hit: d.tasks.find((x) => x.projectId === t.projectId && x.name.toLowerCase().includes(t.title.toLowerCase()) && ((x.dueDate && x.dueDate >= start && x.dueDate < end) || (!x.dueDate && x.createdAtZoho && x.createdAtZoho >= start && x.createdAtZoho < end))),
   }));
-  const pendingCreates = new Set((await prisma.zohoChange.findMany({ where: { kind: "CREATE_TASK", status: "PENDING" } })).map((c) => (c.payload as any)?.name + "|" + (c.payload as any)?.month));
   const byClient = new Map<string, Row[]>();
   for (const r of d.rows) byClient.set(r.client, [...(byClient.get(r.client) ?? []), r]);
   const editable = !d.virtual;
@@ -134,9 +133,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
           <div key={t.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
             <Icon name={hit ? "check" : "alert"} size={15} className={hit ? "text-goodText" : "text-warnText"} label={hit ? "Found in Zoho" : "Missing in Zoho"} />
             <span className="flex-1">{t.title} <span className="text-ink-3">· {projects.get(t.projectId)}</span>{hit ? <span className="text-ink-3"> → {hit.key} {hit.name}</span> : <span className="text-warnText"> · no Zoho task found this month</span>}</span>
-            {!hit && editable && (pendingCreates.has(`${t.title}|${month}`) ? <span className="text-xs text-ink-3">creation waiting for approval</span> : (
-              <form action={requestRecurringTask}><input type="hidden" name="id" value={t.id} /><input type="hidden" name="month" value={month} /><button className="btn">Request creation in Zoho</button></form>
-            ))}
+            {!hit && <span className="text-xs text-ink-3">Create it in Zoho to track it</span>}
           </div>
         ))}
         {!templates.length && <div className="p-3 text-sm text-ink-3">No recurring templates yet. Add them in Settings → Recurring deliverables.</div>}

@@ -124,6 +124,15 @@ export async function startMock(): Promise<Mock> {
         return json({ comments: [{ id: "c1" }] });
       }
       if (cm) return json({ comments: taskComments.get(cm[1]) ?? [] });
+      if (/\/tasks\/\d+\/attachments$/.test(u.pathname))
+        return json({ attachments: [{ attachment_id: "a1", name: "Brief v2.pdf", size: "245760", created_by: { name: "Sandeep" }, created_time: "2026-11-10T10:00:00+05:30", permanent_url: "https://workdrive.example/a1" }] });
+      if (/\/tasks\/\d+\/subtasks$/.test(u.pathname))
+        return json({ tasks: [
+          { id: "s1", prefix: "GM-T9", name: "Draft copy", status: { name: "Closed", is_closed_type: true }, owners_and_work: { owners: [{ name: "Sandeep" }] }, end_date: "2026-11-12" },
+          { id: "s2", prefix: "GM-T10", name: "Design review", status: { name: "Open", is_closed_type: false }, owners_and_work: { owners: [{ name: "Vahid" }] } },
+        ] });
+      if (/\/tasks\/\d+\/activities$/.test(u.pathname))
+        return json({ activities: [{ id: "x1", activity_for: "Status", old_value: "Open", new_value: "In Progress", created_by: { name: "Sandeep" }, time: "2026-11-11T09:30:00+05:30" }] });
       if (one) {
         const t = tasks().find((x) => x.id === one[1]);
         return t ? json({ tasks: [t] }) : json({ error: "not found" }, 404);
@@ -158,6 +167,7 @@ export async function startMock(): Promise<Mock> {
     cliqMessages,
     cliqFiles,
     writes,
+    taskComments,
     setTaskFields: (id, fields) => fieldOverride.set(id, { ...(fieldOverride.get(id) ?? {}), ...fields }),
     mails,
     requests,

@@ -9,27 +9,18 @@ import { Logo } from "@/components/Logo";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const admin = user.role === "ADMIN";
-  const pendingApprovals = admin
-    ? (await prisma.zohoChange.count({ where: { auto: false, status: { in: ["PENDING", "FAILED"] } } })) +
-      (await prisma.reasonReview.count({ where: { status: { in: ["PENDING", "PROOF_SENT"] } } }))
-    : 0;
-  const nav: NavItem[] = admin
-    ? [
-        { href: "/overview", label: "Overview", icon: "grid" },
-        { href: "/people", label: "Individual", icon: "user" },
-        { href: "/clients", label: "Clients", icon: "briefcase" },
-        { href: "/plan", label: "Plan", icon: "calendar" },
-        { href: "/review", label: "Review", icon: "history" },
-        { href: "/approvals", label: "Approvals", icon: "inbox", count: pendingApprovals },
-        { href: "/reports", label: "Reports", icon: "file" },
-        { href: "/settings", label: "Settings", icon: "settings" },
-      ]
-    : [
-        { href: "/me", label: "My dashboard", icon: "home" },
-        { href: "/review", label: "Review", icon: "history" },
-        { href: "/backlog", label: "Backlog", icon: "archive" },
-      ];
+  const { newUpdatesCount } = await import("@/lib/updates");
+  const fresh = await newUpdatesCount(user.id).catch(() => 0);
+  const nav: NavItem[] = [
+    { href: "/overview", label: "Overview", icon: "grid" },
+    { href: "/people", label: "Individual", icon: "user" },
+    { href: "/clients", label: "Clients", icon: "briefcase" },
+    { href: "/plan", label: "Plan", icon: "calendar" },
+    { href: "/updates", label: "Task updates", icon: "message", count: fresh },
+    { href: "/review", label: "Old tasks", icon: "history" },
+    { href: "/reports", label: "Reports", icon: "file" },
+    { href: "/settings", label: "Settings", icon: "settings" },
+  ];
   return (
     <div className="min-h-screen">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:shadow-lg">
@@ -50,7 +41,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <ThemeToggle />
             <span className="hidden max-w-[12rem] truncate whitespace-nowrap pl-1 text-ink-2 lg:inline" title={user.email}>
               {user.name}
-              {admin && <span className="ml-1 text-xs text-ink-3">Admin</span>}
             </span>
             <form action="/api/auth/logout" method="post">
               <button className="btn max-lg:btn-icon" aria-label="Sign out" title="Sign out">

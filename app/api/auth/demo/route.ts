@@ -9,5 +9,5 @@ export async function GET(req: NextRequest) {
   const u = await prisma.user.findUnique({ where: { id: req.nextUrl.searchParams.get("uid") ?? "" } });
   if (!u) return NextResponse.redirect(`${config.appUrl}/login`);
   await setSession(u.id);
-  return NextResponse.redirect(`${config.appUrl}${u.role === "ADMIN" ? "/overview" : "/me"}`);
+  return NextResponse.redirect(`${config.appUrl}/overview`);
 }

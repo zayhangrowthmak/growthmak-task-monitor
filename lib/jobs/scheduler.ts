@@ -1,6 +1,7 @@
 // In-process scheduler (Railway keeps one replica running). Every minute:
 //   full Zoho sync every SYNC_INTERVAL_MIN · plan draft/lock · Cliq state alerts every 5 min
-//   · 1st-of-month posts, Monday check-in, digest · send the Cliq outbox · month-end close
+//   · 1st-of-month posts, digest · send the Cliq outbox · post queued Zoho comments
+//   · re-read Zoho comments on a few followed tasks (Task updates) · month-end close
 import { config, zohoConfigured } from "../config";
 import { zohoConnected } from "../zoho/client";
 import { fullSync } from "../zoho/sync";
@@ -14,6 +15,7 @@ import { acquireLock, releaseLock } from "../lock";
 let started = false;
 let lastSync = 0;
 let lastAlerts = 0;
+let lastComments = 0;
 
 export async function tick(now = Date.now()) {
   try {
@@ -39,9 +41,16 @@ export async function tick(now = Date.now()) {
     const sent = await flushOutbox((m) => generateReport(m));
     if (sent) console.log(`[cliq] sent ${sent}`);
     // Two-way sync: comments, reasons and verdicts written in the dashboard go onto the Zoho task
-    const { flushZohoComments } = await import("../reasons");
+    const { flushZohoComments } = await import("../updates");
     const posted = await flushZohoComments();
     if (posted) console.log(`[zoho] posted ${posted} comment(s)`);
+    // Task updates feed: re-read Zoho comments for a few followed tasks every 5 minutes (stays far under Zoho's limit)
+    if (canSync && now - lastComments >= 5 * 60_000) {
+      lastComments = now;
+      const { refreshDueComments } = await import("../updates");
+      const n = await refreshDueComments(config.jobs.commentsPerTick);
+      if (n) console.log(`[updates] read comments on ${n} task(s)`);
+    }
   } catch (e) {
     console.error("[jobs] tick failed:", e);
   }

@@ -7,10 +7,10 @@ import { currentMonth, fmtDate } from "@/lib/time";
 import { Empty } from "@/components/ui";
 
 export default async function Backlog({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
-  const viewer = await requireUser();
+  await requireUser();
   const sp = await searchParams;
-  const admin = viewer.role === "ADMIN";
-  const userId = admin ? sp.user || undefined : viewer.id;
+  const admin = true;
+  const userId = sp.user || undefined;
   const d = await monthData(currentMonth(), { userId });
   const people = admin ? await prisma.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }) : [];
   const rows = d.backlog.map((t) => ({ t, client: clientOf(t, t.project).name })).filter((x) => !sp.client || x.client === sp.client);

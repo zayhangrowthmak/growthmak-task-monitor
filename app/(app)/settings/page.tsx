@@ -7,7 +7,7 @@ import { zohoConnected } from "@/lib/zoho/client";
 import { cliqConfigured } from "@/lib/cliq";
 import { cleanProjectName } from "@/lib/clients";
 import { fmtDateTime } from "@/lib/time";
-import { syncNow, testCliq, setProjectClient, setRole, setUserActive, saveSettingsAction, setCliqEmail, addRecurring, toggleRecurring } from "@/app/actions";
+import { syncNow, testCliq, setProjectClient, setUserActive, saveSettingsAction, setCliqEmail, addRecurring, toggleRecurring } from "@/app/actions";
 import { getSettings } from "@/lib/settings";
 import { ClientTypeBadge } from "@/components/ui";
 import { mailConnected } from "@/lib/mail";
@@ -148,18 +148,17 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <div className="card overflow-x-auto">
             <table className="tbl w-full">
               <thead><tr><th>Name</th><th>Email</th><th>Access</th><th></th></tr></thead>
+              <caption className="caption-bottom px-3 py-2 text-left text-[11px] text-ink-3">Only the people in ADMIN_EMAILS (set on Railway) can open the dashboard. Everyone else works in Zoho Projects; Remove only hides a person from the numbers.</caption>
               <tbody>
                 {users.filter((u) => u.active).map((u) => (
                   <tr key={u.id}>
                     <td className="font-medium">{u.name}</td>
                     <td className="max-w-[16rem] truncate text-xs text-ink-2" title={u.email}>{u.email}</td>
                     <td>
-                      {u.id === me.id ? <span className="text-xs text-ink-3">Admin (you)</span> : (
-                        <form action={setRole} className="flex items-center gap-2">
-                          <input type="hidden" name="userId" value={u.id} />
-                          <select name="role" defaultValue={u.role}><option value="MEMBER">Specialist (own tasks)</option><option value="ADMIN">Manager / admin</option></select>
-                          <button className="btn">Save</button>
-                        </form>
+                      {config.adminEmails.includes(u.email.toLowerCase()) ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-dark"><Icon name="eye" size={12} />Dashboard{u.id === me.id ? " (you)" : ""}</span>
+                      ) : (
+                        <span className="text-xs text-ink-3">Zoho only</span>
                       )}
                     </td>
                     <td>
@@ -179,7 +178,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           {users.some((u) => !u.active) && (
             <div className="mt-4">
               <div className="label mb-2">Removed from the dashboard</div>
-              <p className="text-xs text-ink-2 mb-2">Hidden everywhere and can't sign in. Tasks assigned only to them are taken off the dashboard (numbers, Kanban, alerts and reports); on shared tasks their name is hidden. Restore brings it all back.</p>
+              <p className="text-xs text-ink-2 mb-2">Hidden everywhere. Tasks assigned only to them are taken off the dashboard (numbers, Kanban, alerts and reports); on shared tasks their name is hidden. Restore brings it all back.</p>
               <div className="card divide-y divide-line">
                 {users.filter((u) => !u.active).map((u) => (
                   <div key={u.id} className="flex items-center justify-between p-3 text-sm">

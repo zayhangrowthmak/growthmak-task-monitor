@@ -138,15 +138,16 @@ export default async function Overview({ searchParams }: { searchParams: Promise
               {d.live && m.oldPending > 0 && <Link href="/review" className="mt-3 inline-block text-sm text-brand hover:underline">Open the old-task review <Icon name="arrowRight" size={14} className="inline -mt-0.5" /></Link>}
             </div>
             <div className="card p-4">
-              <CardTitle icon="flag" tone="crit" note="Planned deliverables only · Client first">Needs attention now</CardTitle>
+              <CardTitle icon="flag" tone="crit" note="Planned deliverables · Client first · opens the Zoho task">Needs attention now</CardTitle>
               {attention.length ? (
                 <ul className="divide-y divide-line">
                   {attention.map((r) => (
                     <li key={r.task.id} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5 py-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)_auto]">
                       <StatePill state={r.state} />
-                      <Link href={`/tasks/${r.task.id}`} className="truncate py-0.5 hover:text-brand" title={`${r.task.name} · ${r.client}`}>
-                        {r.task.name} <span className="text-ink-3">· {r.client}</span>
-                      </Link>
+                      <a href={r.task.url ?? `/tasks/${r.task.id}`} target={r.task.url ? "_blank" : undefined} rel="noreferrer" className="group inline-flex min-w-0 items-center gap-1 py-0.5 hover:text-brand" title={`Open in Zoho: ${r.task.name} · ${r.client}`}>
+                        <span className="truncate">{r.task.name} <span className="text-ink-3">· {r.client}</span></span>
+                        {r.task.url && <Icon name="external" size={12} className="shrink-0 text-ink-3 group-hover:text-brand" />}
+                      </a>
                       <span className="col-start-2 truncate text-xs text-ink-2 sm:col-start-3 sm:max-w-[14rem] sm:text-right">{peopleLabel(r.task)}</span>
                     </li>
                   ))}

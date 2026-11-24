@@ -375,79 +375,85 @@ async function main() {
     assert.equal(peopleLabel(del!.task), "Vahid (owner: Sandeep)");
   });
 
-  console.log("\nDelay reasons: review, proof, two-way Zoho comments");
-  await check("a reason opens a review and queues a Zoho comment (no approval needed)", async () => {
-    const { submitReason } = await import("../lib/reasons");
-    const r = await submitReason(sandeep, "104", "CLIENT_INPUT", "waiting for copy from the client");
-    assert.equal(r.status, "PENDING");
-    const q = await prisma.zohoChange.findMany({ where: { taskId: "104", kind: "ADD_COMMENT" } });
-    assert.equal(q.length, 1);
-    assert.equal(q[0].auto, true);
-    assert.equal(await prisma.zohoChange.count({ where: { auto: false, status: { in: ["PENDING", "FAILED"] } } }), 0, "comments never sit in the approval queue");
+  console.log("\nTask updates: Zoho comment threads, replies, follow-ups");
+  await check("the feed follows open planned tasks and overdue tasks only", async () => {
+    const { followedTaskIds } = await import("../lib/updates");
+    const ids = await followedTaskIds();
+    assert.ok(ids.includes("103"), "overdue planned task followed");
+    assert.ok(!ids.includes("105"), "done task not followed");
+    const closed = await prisma.task.findMany({ where: { id: { in: ids }, isClosed: true } });
+    assert.equal(closed.length, 0);
   });
-  await check("queued comments are posted on the Zoho task", async () => {
-    const { flushZohoComments } = await import("../lib/reasons");
+  await check("Zoho comments are read into the dashboard, @mentions made readable", async () => {
+    mock.taskComments.set("103", [
+      { id: "z1", comment: "<p>Waiting on the client&#39;s logo files</p>", created_by: { name: "Sandeep" }, created_time: "2026-11-20T10:00:00+05:30" },
+      { id: "z2", comment: "<p>zp[@user:777:Mohammed]zp please check</p>", created_by: { name: "Vahid" }, created_time: "2026-11-21T11:00:00+05:30" },
+    ]);
+    const { refreshComments } = await import("../lib/updates");
+    assert.equal(await refreshComments("103"), 2);
+    const rows = await prisma.zohoComment.findMany({ where: { taskId: "103" }, orderBy: { at: "asc" } });
+    assert.equal(rows[0].text, "Waiting on the client's logo files");
+    assert.equal(rows[1].text, "@Mohammed please check");
+    assert.match(rows[1].raw ?? "", /zp\[@/, "raw kept to learn Zoho's mention format");
+    const t = (await prisma.task.findUnique({ where: { id: "103" } }))!;
+    assert.ok(t.commentsCheckedAt && t.lastCommentAt);
+  });
+  await check("a reply goes onto the Zoho task with @tags and pings the tagged person in Cliq", async () => {
+    const { postUpdate, flushZohoComments } = await import("../lib/updates");
+    const sandeepUser = (await prisma.user.findUnique({ where: { email: "sandeep@growthmaksolutions.com" } }))!;
     const before = mock.writes.length;
+    const cliqBefore = mock.cliqMessages.length;
+    await postUpdate(admin, "103", "When will the logo arrive?", [sandeepUser.id], "follow_up");
+    assert.equal(await prisma.zohoChange.count({ where: { auto: false, status: "PENDING" } }), 0, "never waits for approval");
     assert.equal(await flushZohoComments(), 1);
-    const w = mock.writes.slice(before).find((x) => x.path.endsWith("/tasks/104/comments"));
-    assert.ok(w, "POST to Zoho comments");
-    assert.match(String(w!.body.comment ?? w!.body.content), /Delay reason .*Client input pending.*waiting for copy/);
-    assert.equal((await prisma.zohoChange.findFirst({ where: { taskId: "104", kind: "ADD_COMMENT" } }))?.status, "APPLIED");
-  });
-  await check("a new reason replaces one still waiting", async () => {
-    const { submitReason } = await import("../lib/reasons");
-    await submitReason(sandeep, "104", "CLIENT_APPROVAL", "client hasn't approved the draft");
-    const open = await prisma.reasonReview.findMany({ where: { taskId: "104", status: "PENDING" } });
-    assert.equal(open.length, 1);
-    assert.equal(open[0].reason, "CLIENT_APPROVAL");
-  });
-  await check("asking for proof needs a note, tags the person in Cliq with the CC list", async () => {
-    const { decideReason } = await import("../lib/reasons");
-    const rv = (await prisma.reasonReview.findFirst({ where: { taskId: "104", status: "PENDING" } }))!;
-    await assert.rejects(decideReason(admin, rv.id, "PROOF_REQUESTED", null), /proof/);
-    const before = mock.cliqMessages.length;
-    await decideReason(admin, rv.id, "PROOF_REQUESTED", "Forward the client's email asking for more time");
+    const w = mock.writes.slice(before).find((x) => x.path.endsWith("/tasks/103/comments"));
+    assert.ok(w);
+    assert.match(String(w!.body.comment ?? w!.body.content), /^@Sandeep[^\n]* When will the logo arrive\?\n— Mohammed \(via Task Monitor\)/);
+    const thread = await prisma.zohoComment.findMany({ where: { taskId: "103" } });
+    assert.ok(thread.some((c) => c.fromDashboard && /logo arrive/.test(c.text)), "shows in the thread right away");
     await flushOutbox();
-    const m = mock.cliqMessages.slice(before).find((x) => /PROOF NEEDED/.test(x.text));
-    assert.ok(m, "proof request posted");
+    const m = mock.cliqMessages.slice(cliqBefore).find((x) => /FOLLOW UP/.test(x.text));
+    assert.ok(m, "Cliq ping");
     assert.match(m!.text, /\{@sandeep@growthmaksolutions\.com\}/);
-    assert.match(m!.text, /Forward the client's email/);
-    assert.match(m!.text, /mohammed@growthmaksolutions\.com/, "addressed to the manager who asked");
-    assert.match(m!.text, /CC sandeep@growthmak\.com, mohammed@growthmak\.com/);
-    assert.equal((await prisma.reasonReview.findUnique({ where: { id: rv.id } }))?.status, "PROOF_REQUESTED");
+    assert.match(m!.text, /reply on the Zoho task/);
   });
-  await check("the person marks the proof sent; it goes back to the manager", async () => {
-    const { markProofSent, reasonsToReview } = await import("../lib/reasons");
-    const rv = (await prisma.reasonReview.findFirst({ where: { taskId: "104", status: "PROOF_REQUESTED" } }))!;
-    const vahid = (await prisma.user.findUnique({ where: { email: "vahid@growthmaksolutions.com" } }))!;
-    await assert.rejects(markProofSent(vahid, rv.id, null), /Not your task/);
-    await markProofSent(sandeep, rv.id, "sent the 12 Nov thread");
-    assert.equal((await prisma.reasonReview.findUnique({ where: { id: rv.id } }))?.status, "PROOF_SENT");
-    assert.ok((await reasonsToReview()) >= 1, "counted for the managers again");
+  await check("new comments are counted in the menu until the page is opened", async () => {
+    const { newUpdatesCount, markUpdatesSeen } = await import("../lib/updates");
+    const { setState } = await import("../lib/db");
+    await setState(`updates.seen.${admin.id}`, new Date("2026-11-01").toISOString());
+    assert.ok((await newUpdatesCount(admin.id)) >= 1);
+    await markUpdatesSeen(admin.id);
+    assert.equal(await newUpdatesCount(admin.id), 0);
   });
-  await check("agreeing closes it and posts the verdict on Zoho", async () => {
-    const { decideReason, flushZohoComments } = await import("../lib/reasons");
-    const rv = (await prisma.reasonReview.findFirst({ where: { taskId: "104", status: "PROOF_SENT" } }))!;
-    await decideReason(admin, rv.id, "AGREED", "Email checked, fine");
-    const before = mock.writes.length;
-    await flushZohoComments();
-    const texts = mock.writes.slice(before).map((w) => String(w.body.comment ?? w.body.content));
-    assert.ok(texts.some((t) => /agreed by Mohammed: Email checked/.test(t)), texts.join(" | "));
-    const done = (await prisma.reasonReview.findUnique({ where: { id: rv.id } }))!;
-    assert.equal(done.status, "AGREED");
-    assert.equal(done.managerNote, "Email checked, fine");
+  await check("the background refresh reads only a few tasks per run, oldest first", async () => {
+    const { refreshDueComments, followedTaskIds } = await import("../lib/updates");
+    const ids = await followedTaskIds();
+    await prisma.task.updateMany({ where: { id: { in: ids } }, data: { commentsCheckedAt: null } });
+    assert.equal(await refreshDueComments(1), 1);
+    assert.equal(await prisma.task.count({ where: { id: { in: ids }, commentsCheckedAt: null } }), ids.length - 1);
+    await refreshDueComments(50);
+    assert.equal(await refreshDueComments(50), 0, "nothing is re-read within 20 minutes");
   });
-  await check("a dashboard comment is posted to Zoho too", async () => {
-    const { queueZohoComment, flushZohoComments } = await import("../lib/reasons");
-    await queueZohoComment("101", "Sandeep (via Task Monitor): client call moved to Friday", "comment", sandeep.id);
-    const before = mock.writes.length;
-    await flushZohoComments();
-    assert.ok(mock.writes.slice(before).some((w) => w.path.endsWith("/tasks/101/comments")));
+  await check("documents, subtasks and the activity log are read from Zoho", async () => {
+    const { listAttachments, listSubtasks, listActivities } = await import("../lib/zoho/write");
+    const docs = await listAttachments("11", "103");
+    assert.equal(docs[0].name, "Brief v2.pdf");
+    assert.equal(docs[0].url, "https://workdrive.example/a1");
+    const subs = await listSubtasks("11", "103");
+    assert.deepEqual(subs.map((x) => [x.name, x.closed, x.owners]), [["Draft copy", true, "Sandeep"], ["Design review", false, "Vahid"]]);
+    const act = await listActivities("11", "103");
+    assert.equal(act[0].text, "Status: Open → In Progress");
+    assert.equal(act[0].by, "Sandeep");
   });
-  await check("Zoho comments are read back into the dashboard", async () => {
-    const { listComments } = await import("../lib/zoho/write");
-    const c = await listComments("11", "101");
-    assert.ok(c.some((x) => /client call moved to Friday/.test(x.text)), JSON.stringify(c));
+  await check("task alerts send people to the Zoho task, not the dashboard", async () => {
+    const { alertText } = await import("../lib/jobs/alerts");
+    const { monthData } = await import("../lib/metrics");
+    const d = await monthData(currentMonth());
+    const r = d.rows.find((x) => x.task.id === "103")!;
+    const text = await alertText(r, new Date());
+    assert.match(text, /Update the task in Zoho: https?:\/\//);
+    assert.doesNotMatch(text, /\/tasks\/103|\/me\b|Confidence/);
+    assert.match(text, /Last comment: .*Mohammed/);
   });
 
   console.log("\nMonth end, report");

@@ -1,7 +1,6 @@
-import { requireUser } from "@/lib/auth";
-import { PersonDashboard } from "@/components/PersonDashboard";
+import { redirect } from "next/navigation";
 
-export default async function Me({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
-  const user = await requireUser();
-  return <PersonDashboard person={user} viewer={user} sp={await searchParams} basePath="/me" />;
+// The member view was retired: team members work in Zoho Projects. Old links land on the overview.
+export default function Me() {
+  redirect("/overview");
 }
